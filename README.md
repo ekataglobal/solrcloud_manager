@@ -1,0 +1,2 @@
+solrcloud_manager
+=================
