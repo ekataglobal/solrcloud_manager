@@ -1,0 +1,8 @@
+*.class
+*.log
+dist/*
+target/
+project/boot/
+project/plugins/project/
+.scala_dependencies
+.idea
