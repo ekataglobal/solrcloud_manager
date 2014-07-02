@@ -118,7 +118,7 @@ object CLI extends App {
             val populationOperation = Operations.populateCluster(clusterManager, config.collection, config.slicesPerNode)
             val wipeOperation =
               if (config.wipe) Operations.wipeCollectionFromNode(clusterManager, config.collection, originatingNode)
-              else Operation(Seq())
+              else Operation.empty
 
             populationOperation ++ wipeOperation
           }

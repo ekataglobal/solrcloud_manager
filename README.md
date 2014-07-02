@@ -43,7 +43,15 @@ Cluster commands:
 **clean**:
     Removes any replicas in a given collection that are not currently marked "active". A node doesn't have to be
     up for it's replicas to be removed.
+
     
+TODO:
+=====
+
+* Proper output handling (logging)
+* More consistent exception responses and handling (Use ManagerException more)
+* Solr version detection
+* Better introspection of solr responses
 
 Issues:
 =======
