@@ -73,6 +73,8 @@ changed after CREATECOLLECTION.
 1. (w) SOLR-5970 - Some collections api requests return status of 0 in the responseHeader, despite a failure. (CREATECOLLECTION in non-async, maybe others)
 1. (w) If you DELETEREPLICA the **last** replica for a given shard, you get an error like 
    "Invalid shard name : shard2 in collection : collection1", but the replica **is** actually removed from the clusterstate
+1. You can have two replicas of the same slice on the same node (This tool provides some additional protection around the ADDREPLICA 
+    command, but not at collection creation time)
 
 IntelliJ Issues:
 
