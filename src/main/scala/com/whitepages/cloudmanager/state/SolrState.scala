@@ -30,8 +30,20 @@ case class SolrState(state: ClusterState) {
     "CoreName"
   ).mkString("\t")
   def printReplicas() {
+    println("Nodes:")
+    for { node <- allNodes } {
+      val nodeName = hostName(node)
+      println(
+        nodeName +
+          " (" +
+          (if (liveNodes.contains(node)) "up" else "down") +
+          "/" +
+          (if (unusedNodes.contains(node)) "unused" else "used") +
+          ")"
+      )
+    }
     println(printHeader)
-    for {replica <- allReplicas} {
+    for { replica <- allReplicas } {
       println(List(
         replica.collection,
         replica.sliceName.+(if (replica.leader) "*" else ""),
@@ -56,7 +68,9 @@ case class SolrState(state: ClusterState) {
   } yield SolrReplica(collection, slice, node)
 
   lazy val liveNodes = state.getLiveNodes.asScala
-  lazy val unusedNodes = liveNodes.filterNot(allReplicas.map(_.node).contains)
+  lazy val downNodes =  allReplicas.map(_.node).filterNot(liveNodes.contains)
+  lazy val allNodes = liveNodes ++ downNodes
+  lazy val unusedNodes = allNodes.filterNot(allReplicas.map(_.node).contains)
   lazy val activeReplicas = allReplicas.filter(_.active)
   lazy val inactiveReplicas = allReplicas.filterNot(activeReplicas.contains)
 

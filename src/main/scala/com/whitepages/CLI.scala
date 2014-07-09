@@ -29,7 +29,8 @@ object CLI extends App {
                         configName: String = "",
                         maxShardsPerNode: Option[Int] = None,
                         replicationFactor: Option[Int] = None,
-                        createNodeSet: Option[Seq[String]] = None
+                        createNodeSet: Option[Seq[String]] = None,
+                        alternateHost: String = ""
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
@@ -84,7 +85,11 @@ object CLI extends App {
         opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("The desired number of replicas (1-based, default 1)"),
         opt[String]("nodes") optional() action { (x, c) => { c.copy(createNodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)")
       )
-
+    cmd("copy") action { (_, c) =>
+      c.copy(mode = "copy") } text("Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty and have the same number of slices.") children(
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
+        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a node (any node) in the cluster to copy from, ie 'foo.QA.com:8983'")
+      )
     checkConfig{
       c =>
         if (c.zk.isEmpty) failure("provide a zookeeper connection string, with port and (optional) chroot")
@@ -160,6 +165,9 @@ object CLI extends App {
               config.replicationFactor,
               normalizedNodes
             )))
+          }
+          case "copy" => {
+            Operations.deployFromAnotherCluster(clusterManager, config.collection, config.alternateHost)
           }
         }
 

@@ -25,8 +25,10 @@ case class ClusterManager(client: CloudSolrServer) {
     if (aliases == null) Map() else aliases.asScala
   }
   def printAliases() {
-    println("Aliases:")
-    aliasMap.foreach{ case (alias, collection) => println(s"$alias\t->\t$collection") }
+    if (aliasMap.nonEmpty) {
+      println("Aliases:")
+      aliasMap.foreach { case (alias, collection) => println(s"$alias\t->\t$collection")}
+    }
   }
 
   def shutdown() = {

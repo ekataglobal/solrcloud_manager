@@ -9,6 +9,7 @@ object Conditions {
   def liveReplicaCount(collection: String, slice: String) = (state: SolrState) => state.replicasFor(collection, slice).count(_.active)
   def nodeExists(node: String) = (state: SolrState) => state.liveNodes.contains(node)
   def replicaExists(collection: String, slice: String, replica: String) = (state: SolrState) => state.replicasFor(collection, slice).find(_.replicaName == replica).nonEmpty
+  def coreNameExists(name: String) = (state: SolrState) => state.allReplicas.map(_.core).contains(name)
   def sliceIncludesNode(collection: String, slice: String, node: String) =
     (state: SolrState) => state.replicasFor(collection, slice).filter(_.node == node).nonEmpty
   def activeSliceOnNode(collection: String, slice: String, node: String) =

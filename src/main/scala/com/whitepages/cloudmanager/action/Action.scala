@@ -1,7 +1,7 @@
 package com.whitepages.cloudmanager.action
 
 import org.apache.solr.client.solrj.impl.CloudSolrServer
-import com.whitepages.cloudmanager.state.{ClusterManager, SolrState}
+import com.whitepages.cloudmanager.state._
 import org.apache.solr.client.solrj.request.QueryRequest
 import scala.util.{Random, Failure, Success, Try}
 import org.apache.solr.common.util.NamedList
@@ -9,6 +9,14 @@ import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 import scala.concurrent.duration._
 import scala.annotation.tailrec
+import org.apache.solr.client.solrj.SolrServer
+import com.whitepages.cloudmanager.state.SolrState
+import com.whitepages.cloudmanager.state.GenericSolrResponse
+import scala.util.Failure
+import scala.Some
+import com.whitepages.cloudmanager.state.ClusterManager
+import com.whitepages.cloudmanager.state.ReplicationStateResponse
+import scala.util.Success
 
 case class StateCondition(name: String, check: (SolrState) => Boolean)
 
@@ -22,7 +30,7 @@ trait Action {
   def execute(clusterManager: ClusterManager): Boolean
 
   def perform(clusterManager: ClusterManager): Boolean = {
-    if ( canPerform(clusterManager.currentState)) {
+    if ( canPerform(clusterManager.currentState) ) {
       var actionSuccess = true
 
       if (execute(clusterManager)) {
@@ -65,14 +73,15 @@ trait Action {
 
     val asyncPause = 10 seconds
 
-    def getSolrResponse(client: CloudSolrServer, params: ModifiableSolrParams) = {
+    def getSolrResponse(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections") = {
       val req = new QueryRequest(params)
-      req.setPath("/admin/collections")
-      Try(client.request(req))
+      req.setPath(path)
+      println(s"REQUEST: ${req.getPath} ${req.getParams}")
+      Try(client.request(req)).map(GenericSolrResponse)
     }
 
-    def submitRequest(client: CloudSolrServer, params: ModifiableSolrParams): Boolean = {
-      val response = getSolrResponse(client, params)
+    def submitRequest(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections"): Boolean = {
+      val response = getSolrResponse(client, params, path)
       response match {
         case Success(r) => {
           println(s"RESPONSE: $response")
@@ -82,11 +91,12 @@ trait Action {
       }
     }
 
-    def checkStatus(rsp: NamedList[AnyRef]) = {
-      rsp.get("responseHeader").asInstanceOf[NamedList[AnyRef]].get("status").toString == "0" &&
-        rsp.get("failure") == null  // some collections api requests indicate status == 0 but add this node to indicate failure
+    def checkStatus(rsp: SolrResponseHelper) = {
+      rsp.status == "0" && rsp.walk("failure") == None
     }
-    def checkAsyncJobStatus(rsp: NamedList[AnyRef]) = rsp.get("status").asInstanceOf[NamedList[AnyRef]].get("state").toString != "running"
+    def checkAsyncJobStatus(rsp: SolrResponseHelper) = {
+      rsp.walk("status", "state") != Some("running")
+    }
 
     def submitAsyncRequest(client: CloudSolrServer, params: ModifiableSolrParams): Boolean = {
       val requestId = Random.nextInt(1000000).toString
@@ -129,6 +139,56 @@ trait Action {
           false
         }
       }
+    }
+  }
+
+  object ReplicationHelpers {
+    def checkFetchIndexResponse(rsp: SolrResponseHelper): Boolean = {
+      rsp.status == "0" && rsp.walk("status") == Some("OK")
+    }
+    def checkReplicationStatusResponse(rsp: SolrResponseHelper): Boolean = {
+      rsp.status == "0"
+    }
+    def checkRemainingReplicationTime(rsp: ReplicationStateResponse): Int = {
+      (rsp.replicating, rsp.replicationTimeRemaining) match {
+        case (None, _) => 1 // the appropriate node hasn't shown up yet
+        case (Some("false"), _) => 0 // all done
+        case (Some(_), Some(remaining)) => remaining.toSeconds.toInt
+        case (Some(_), None) => 10 // we're replicating, but for some reason we can't tell how long is remaining
+      }
+    }
+
+    @tailrec
+    def waitForReplication(client: SolrServer, node: String):Boolean = {
+
+      val params = new ModifiableSolrParams
+      params.set("command", "details")
+
+      val checkResponse = SolrRequestHelpers.getSolrResponse(client, params, s"/$node/replication")
+      checkResponse match {
+        case Success(r) if checkReplicationStatusResponse(r) => {
+          val rsp = ReplicationStateResponse(r.rsp)
+          println(s"RESPONSE: $r")
+          val remaining = checkRemainingReplicationTime(rsp).seconds
+          if (remaining == 0.seconds) {
+            true
+          }
+          else {
+            println(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
+            Thread.sleep(Math.min(remaining.toMillis / 2, 1000))
+            waitForReplication(client, node)
+          }
+        }
+        case Success(r) if !checkReplicationStatusResponse(r) => {
+          println(s"Unexpected response checking replication status: $r")
+          false
+        }
+        case Failure(e) => {
+          println(s"Error checking replication status, $e")
+          false
+        }
+      }
+
     }
   }
 
