@@ -12,9 +12,6 @@ import com.whitepages.cloudmanager.action.DeleteReplica
 import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
 
-sealed trait SupportedOperation
-case object Move extends SupportedOperation
-
 
 object CLI extends App {
   case class CLIConfig(
@@ -51,6 +48,12 @@ object CLI extends App {
     cmd("fill") action { (_, c) =>
       c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out")
+      )
+    cmd("addreplica") action { (_, c) =>
+      c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to add the replica for"),
+        opt[String]("slice") required() action { (x, c) => { c.copy(slice = x) } } text("The name of the slice to add the replica for"),
+        opt[String]("node") required() action { (x, c) => { c.copy(node = x) } } text("The node the replica should be added to")
       )
     cmd("deletereplica") action { (_, c) =>
       c.copy(mode = "deletereplica") } text("delete a specific replica") children(
@@ -102,8 +105,8 @@ object CLI extends App {
         // get the requested operation
         val operation: Operation = config.mode match {
           case "clusterstatus" => {
-            startState.printReplicas()
             clusterManager.printAliases
+            startState.printReplicas()
             Operation.empty
           }
           case "populate" => {
@@ -124,6 +127,9 @@ object CLI extends App {
           }
           case "fill" => {
             Operations.fillCluster(clusterManager, config.collection)
+          }
+          case "addreplica" => {
+            Operation(Seq(AddReplica(config.collection, config.slice, config.node)))
           }
           case "deletereplica" => {
             Operation(Seq(DeleteReplica(config.collection, config.slice, startState.canonicalNodeName(config.node), config.safetyFactor)))
