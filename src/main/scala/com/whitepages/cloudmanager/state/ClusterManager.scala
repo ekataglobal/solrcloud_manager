@@ -3,13 +3,14 @@ package com.whitepages.cloudmanager.state
 import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
 import org.apache.solr.client.solrj.impl.CloudSolrServer
+import com.whitepages.cloudmanager.ManagerSupport
 
 /**
  * Encapsulates the methods of getting and setting state in the cluster
  *
  * @param client A preconstructed CloudSolrServer client. This client will be connect()'ed if it wasn't already.
  */
-case class ClusterManager(client: CloudSolrServer) {
+case class ClusterManager(client: CloudSolrServer) extends ManagerSupport {
   def this(zk: String) = this(new CloudSolrServer(zk))
   
   client.connect()
@@ -26,8 +27,8 @@ case class ClusterManager(client: CloudSolrServer) {
   }
   def printAliases() {
     if (aliasMap.nonEmpty) {
-      println("Aliases:")
-      aliasMap.foreach { case (alias, collection) => println(s"$alias\t->\t$collection")}
+      comment.info("Aliases:")
+      aliasMap.foreach { case (alias, collection) => comment.info(s"$alias\t->\t$collection")}
     }
   }
 

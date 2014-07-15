@@ -56,11 +56,11 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String) extend
         val to = ReplicationStateResponse(toRsp.rsp)
 
         if (from.generation != to.generation) {
-          println(s"Index generation doesn't match, from: ${from.generation}, to: ${to.generation}")
+          comment.warn(s"Index generation doesn't match, from: ${from.generation}, to: ${to.generation}")
           false
         }
         else if (from.indexVersion != to.indexVersion) {
-          println(s"Index version doesn't match, from: ${from.indexVersion}, to: ${to.indexVersion}")
+          comment.warn(s"Index version doesn't match, from: ${from.indexVersion}, to: ${to.indexVersion}")
           false
         }
         else true

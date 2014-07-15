@@ -2,8 +2,9 @@ package com.whitepages.cloudmanager.action
 
 import com.whitepages.cloudmanager.state.{ClusterManager, SolrState}
 import scala.annotation.tailrec
+import com.whitepages.cloudmanager.ManagerSupport
 
-object Conditions {
+object Conditions extends ManagerSupport {
   def collectionExists(collection: String) = (state: SolrState) => state.collections.contains(collection)
   def activeCollection(collection: String) = (state: SolrState) => state.replicasFor(collection).forall(_.active)
   def liveReplicaCount(collection: String, slice: String) = (state: SolrState) => state.replicasFor(collection, slice).count(_.active)
@@ -24,7 +25,7 @@ object Conditions {
       case true => true
       case false if timeoutSec == 0 => false
       case false if (timeoutSec > 0 || timeoutSec < 0) => {
-        if (timeoutSec % 10 == 0) println("Waiting for condition")
+        if (timeoutSec % 10 == 0) comment.debug("Waiting for condition")
         Thread.sleep(1000)
         // if a -1 timeout was initially used, this could int-overflow in about 70 years. Oh well.
         waitForState(stateFactory, condition, timeoutSec - 1)

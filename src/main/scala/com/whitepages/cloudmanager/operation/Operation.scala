@@ -4,12 +4,13 @@ import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.action.Action
 import com.whitepages.cloudmanager.state.ClusterManager
 import java.util.Calendar
+import com.whitepages.cloudmanager.ManagerSupport
 
 
 object Operation {
   def empty = Operation(Seq())
 }
-case class Operation(actions: Seq[Action]) {
+case class Operation(actions: Seq[Action]) extends ManagerSupport {
 
   private val calendar = Calendar.getInstance()
 
@@ -22,23 +23,23 @@ case class Operation(actions: Seq[Action]) {
     if (actions.isEmpty) {
       true
     } else {
-      println(calendar.getTime + " Beginning " + this)
+      comment.warn(calendar.getTime + " Beginning " + this)
       val success = actions.foldLeft(true)((goodSoFar, action) => {
         if (goodSoFar) {
-          println(s"Starting to apply $action")
+          comment.debug(s"Starting to apply $action")
           val actionSuccess = if (action.perform(clusterManager)) {
-            println(s"Finished applying $action")
+            comment.debug(s"Finished applying $action")
             true
           }
           else {
-            println(s"Could not apply $action")
+            comment.warn(s"Could not apply $action")
             false
           }
           actionSuccess
         }
         else goodSoFar
       })
-      println(calendar.getTime + " Finished " + this)
+      comment.warn(calendar.getTime + " Finished " + this)
       success
     }
   }

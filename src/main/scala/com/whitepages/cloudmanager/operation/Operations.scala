@@ -4,8 +4,9 @@ import com.whitepages.cloudmanager.action.{FetchIndex, DeleteReplica, AddReplica
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.ClusterManager
 import scala.annotation.tailrec
+import com.whitepages.cloudmanager.ManagerSupport
 
-object Operations {
+object Operations extends ManagerSupport {
 
   /**
    * Generates an operation to handle the expected data deployment scheme. So given our expected build strategy:
@@ -36,7 +37,7 @@ object Operations {
 
 
     val assignments = nodesWithoutCollection.toSeq.zip(List.fill(replicationFactor)(sliceNames).flatten.grouped(slicesPerNode).toList)
-    println(s"Populate Operation Found: Available Nodes - ${nodesWithoutCollection.size}, Replication factor - $replicationFactor, nodesPerSet - $nodesPerSet")
+    comment.info(s"Populate Operation Found: Available Nodes - ${nodesWithoutCollection.size}, Replication factor - $replicationFactor, nodesPerSet - $nodesPerSet")
     val actions = for {(node, slices) <- assignments
                        slice <- slices} yield AddReplica(collection, slice, node)
     Operation(actions)
@@ -89,7 +90,6 @@ object Operations {
       else {
         // the slice with the fewest replicas
         val minSlice = participation.nodesPerSlice.minBy(_._2)._1
-        println(state.liveNodes.size, minSlice, participation.sliceParticipants(minSlice))
         val nodesWithoutSlice = state.liveNodes -- participation.sliceParticipants(minSlice).map(_.node)
         // the node with the fewest replicas that doesn't have the slice with the fewest replicas
         val minNode = nodesWithoutSlice.minBy( participation.sliceCount )
@@ -101,7 +101,6 @@ object Operations {
       }
     }
 
-    println(maxSlicesPerNode, participation, currentSlots, availableSlots)
     Operation(assignSlot(Seq(), participation, availableSlots))
   }
 
@@ -149,6 +148,15 @@ object Operations {
     Operation(replicasOnNode.map( (replica) => DeleteReplica(replica.collection, replica.sliceName, replica.node)) )
   }
 
+  /**
+   * Currently uses coreadmin's fetchindex command even for populating replicas once the leader has been
+   * updated. Might be able to do something like this instead:
+   * http://10.8.100.42:7575/solr/admin/cores?action=REQUESTRECOVERY&core=collection1_shard1_replica1
+   * @param clusterManager
+   * @param collection
+   * @param deployFrom
+   * @return
+   */
   def deployFromAnotherCluster(clusterManager: ClusterManager, collection: String, deployFrom: String): Operation = {
     def firstCore(coreName: String) = coreName.replaceAll("""replica\d""", "replica1")
     def node2host(nodeName: String) = nodeName.substring(0, nodeName.indexOf('_'))

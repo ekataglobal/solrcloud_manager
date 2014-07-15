@@ -17,8 +17,8 @@ case class DeleteCollection(collection: String) extends Action {
     val currentAliases = clusterManager.aliasMap.filter{ case (_, value) => value == collection }.map(_._1)
 
     if (currentAliases.nonEmpty) {
-      println("Refusing to delete a collection that an alias is currently pointing to. Delete or move the alias first.")
-      println(s"Active aliases for $collection: ${currentAliases.mkString(", ")}")
+      comment.warn("Refusing to delete a collection that an alias is currently pointing to. Delete or move the alias first.")
+      comment.warn(s"Active aliases for $collection: ${currentAliases.mkString(", ")}")
       false
     } else {
       val params = new ModifiableSolrParams

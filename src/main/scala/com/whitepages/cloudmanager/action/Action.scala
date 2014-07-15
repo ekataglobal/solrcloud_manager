@@ -17,10 +17,11 @@ import scala.Some
 import com.whitepages.cloudmanager.state.ClusterManager
 import com.whitepages.cloudmanager.state.ReplicationStateResponse
 import scala.util.Success
+import com.whitepages.cloudmanager.ManagerSupport
 
 case class StateCondition(name: String, check: (SolrState) => Boolean)
 
-trait Action {
+trait Action extends ManagerSupport {
   
   val name: String = this.getClass.getSimpleName
 
@@ -34,19 +35,19 @@ trait Action {
       var actionSuccess = true
 
       if (execute(clusterManager)) {
-        println(s"Applied $this")
+        comment.info(s"Applied $this")
       }
       else {
-        println(s"Could not apply $this")
+        comment.info(s"Could not apply $this")
         actionSuccess = false
       }
 
       if (actionSuccess) {
         if (verify(clusterManager.currentState)) {
-          println(s"Verified $this")
+          comment.info(s"Verified $this")
         }
         else {
-          println(s"Failed to verify $this")
+          comment.info(s"Failed to verify $this")
           actionSuccess = false
         }
       }
@@ -63,8 +64,8 @@ trait Action {
   private def checkAndReport(conditions: List[StateCondition], state: SolrState): Boolean = {
     conditions.forall {
       condition => condition.check(state) match {
-        case false => println(s"Failed: ${condition.name}"); false
-        case true  => println(s"Success: ${condition.name}"); true
+        case false => comment.warn(s"Check Failed: ${condition.name}"); false
+        case true  => comment.info(s"Check Succeeded: ${condition.name}"); true
       }
     }
   }
@@ -76,7 +77,7 @@ trait Action {
     def getSolrResponse(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections") = {
       val req = new QueryRequest(params)
       req.setPath(path)
-      println(s"REQUEST: ${req.getPath} ${req.getParams}")
+      comment.debug(s"REQUEST: ${req.getPath} ${req.getParams}")
       Try(client.request(req)).map(GenericSolrResponse)
     }
 
@@ -84,27 +85,28 @@ trait Action {
       val response = getSolrResponse(client, params, path)
       response match {
         case Success(r) => {
-          println(s"RESPONSE: $response")
+          comment.debug(s"RESPONSE: $response")
           checkStatus(r)
         }
-        case Failure(e) => println(s"Request failed: $e"); false
+        case Failure(e) => comment.warn(s"Request failed: $e"); false
       }
     }
 
     def checkStatus(rsp: SolrResponseHelper) = {
       rsp.status == "0" && rsp.walk("failure") == None
     }
+    private val waitingStates = Set[Option[String]]( Some("submitted"), Some("running") )
     def checkAsyncJobStatus(rsp: SolrResponseHelper) = {
-      rsp.walk("status", "state") != Some("running")
+      !waitingStates.contains(rsp.walk("status", "state"))
     }
 
     def submitAsyncRequest(client: CloudSolrServer, params: ModifiableSolrParams): Boolean = {
-      val requestId = Random.nextInt(1000000).toString
+      val requestId = Random.nextInt(100000000).toString
       params.set("async", requestId)
       val response = getSolrResponse(client, params)
       val success = response match {
         case Success(r) => checkStatus(r)
-        case Failure(e) => println(s"Request failed: $e"); false
+        case Failure(e) => comment.warn(s"Request failed: $e"); false
       }
       if (success) {
         monitorAsyncRequest(client, requestId)
@@ -120,22 +122,22 @@ trait Action {
       val checkResponse = getSolrResponse(client, checkParams)
       checkResponse match {
         case Success(r) if checkStatus(r) => {
-          println(s"RESPONSE: $r")
+          comment.debug(s"RESPONSE: $r")
           if (checkAsyncJobStatus(r)) {
             true
           }
           else {
-            println(s"Waiting for async request $requestId")
+            comment.info(s"Waiting for async request $requestId")
             Thread.sleep(asyncPause.toMillis)
             monitorAsyncRequest(client, requestId)
           }
         }
         case Success(r) if !checkStatus(r) => {
-          println(s"Unexpected response checking async request $requestId: $r")
+          comment.warn(s"Unexpected response checking async request $requestId: $r")
           false
         }
         case Failure(e) => {
-          println(s"Error checking async job status. ID $requestId, $e")
+          comment.warn(s"Error checking async job status. ID $requestId, $e")
           false
         }
       }
@@ -168,23 +170,23 @@ trait Action {
       checkResponse match {
         case Success(r) if checkReplicationStatusResponse(r) => {
           val rsp = ReplicationStateResponse(r.rsp)
-          println(s"RESPONSE: $r")
+          comment.debug(s"RESPONSE: $r")
           val remaining = checkRemainingReplicationTime(rsp).seconds
           if (remaining == 0.seconds) {
             true
           }
           else {
-            println(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
+            comment.info(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
             Thread.sleep(Math.min(remaining.toMillis / 2, 1000))
             waitForReplication(client, node)
           }
         }
         case Success(r) if !checkReplicationStatusResponse(r) => {
-          println(s"Unexpected response checking replication status: $r")
+          comment.warn(s"Unexpected response checking replication status: $r")
           false
         }
         case Failure(e) => {
-          println(s"Error checking replication status, $e")
+          comment.warn(s"Error checking replication status, $e")
           false
         }
       }

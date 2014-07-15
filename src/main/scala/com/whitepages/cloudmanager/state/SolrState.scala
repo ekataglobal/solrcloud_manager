@@ -4,7 +4,7 @@ import org.apache.solr.common.cloud.{ZkStateReader, ClusterState, Replica, Slice
 import scala.util.matching.Regex
 import scala.collection.JavaConverters._
 import java.net.InetAddress
-import com.whitepages.cloudmanager.ManagerException
+import com.whitepages.cloudmanager.{ManagerSupport, ManagerException}
 
 
 case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
@@ -19,7 +19,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
   lazy val node = replica.getNodeName
 }
 
-case class SolrState(state: ClusterState) {
+case class SolrState(state: ClusterState) extends ManagerSupport {
   val printHeader = List(
     "Collection",
     "Slice",
@@ -30,10 +30,10 @@ case class SolrState(state: ClusterState) {
     "CoreName"
   ).mkString("\t")
   def printReplicas() {
-    println("Nodes:")
+    comment.info("Nodes:")
     for { node <- allNodes } {
       val nodeName = hostName(node)
-      println(
+      comment.info(
         nodeName +
           " (" +
           (if (liveNodes.contains(node)) "up" else "down") +
@@ -42,9 +42,9 @@ case class SolrState(state: ClusterState) {
           ")"
       )
     }
-    println(printHeader)
+    comment.info(printHeader)
     for { replica <- allReplicas } {
-      println(List(
+      comment.info(List(
         replica.collection,
         replica.sliceName.+(if (replica.leader) "*" else ""),
         replica.replicaName,

@@ -6,8 +6,9 @@ import org.apache.solr.common.params.CollectionParams.CollectionAction
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
+import com.whitepages.cloudmanager.ManagerSupport
 
-object CreateCollection {
+object CreateCollection extends ManagerSupport {
   /**
    * Tests whether a given collection configName exists in ZK.
    * Can't put this check in Conditions, since the necessary data isn't in the SolrState
@@ -23,7 +24,7 @@ object CreateCollection {
     // before you can try again
     if (!client.getZkStateReader.getZkClient.exists(ZkStateReader.CONFIGS_ZKNODE + "/" + configName, true)) {
       val knownConfigs = client.getZkStateReader.getZkClient.getChildren(ZkStateReader.CONFIGS_ZKNODE, null, true).asScala
-      println(s"The specified config '$configName' couldn't be found in ZK. Known configs are: ${knownConfigs.mkString(", ")}")
+      comment.warn(s"The specified config '$configName' couldn't be found in ZK. Known configs are: ${knownConfigs.mkString(", ")}")
       false
     }
     else true

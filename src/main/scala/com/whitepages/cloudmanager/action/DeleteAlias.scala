@@ -19,7 +19,7 @@ case class DeleteAlias(aliasName: String) extends Action {
       success && !clusterManager.aliasMap.contains(aliasName)
     }
     else {
-      println(s"Alias name not found: $aliasName")
+      comment.warn(s"Alias name not found: $aliasName")
       false
     }
   }

@@ -16,7 +16,7 @@ case class AddReplica(collection: String, slice: String, copyTo: String, waitUnt
   )
 
   override def execute(clusterManager: ClusterManager): Boolean = {
-    println(s"Issuing command for ${this.name}: Collection: $collection, Slice: $slice, copying onto: $copyTo")
+    comment.info(s"Issuing command for ${this.name}: Collection: $collection, Slice: $slice, copying onto: $copyTo")
 
     val params = new ModifiableSolrParams
     params.set("action", CollectionAction.ADDREPLICA.toString)

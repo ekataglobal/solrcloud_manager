@@ -3,7 +3,7 @@ package com.whitepages
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.operation.{Operations, Operation}
 import com.whitepages.cloudmanager.action._
-import com.whitepages.cloudmanager.ManagerException
+import com.whitepages.cloudmanager.{ManagerConsoleLogging, ManagerSupport, ManagerException}
 import com.whitepages.cloudmanager.action.UpdateAlias
 import scala.Some
 import com.whitepages.cloudmanager.state.ClusterManager
@@ -11,9 +11,11 @@ import com.whitepages.cloudmanager.action.DeleteCollection
 import com.whitepages.cloudmanager.action.DeleteReplica
 import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
+import org.slf4j.LoggerFactory
+import org.apache.log4j.Level
 
 
-object CLI extends App {
+object CLI extends App with ManagerSupport {
   case class CLIConfig(
                         zk: String = "",
                         mode: String = "clusterstatus",
@@ -30,13 +32,18 @@ object CLI extends App {
                         maxShardsPerNode: Option[Int] = None,
                         replicationFactor: Option[Int] = None,
                         createNodeSet: Option[Seq[String]] = None,
-                        alternateHost: String = ""
+                        alternateHost: String = "",
+                        outputLevel: Level = Level.INFO
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
     opt[String]('z', "zk") required() action { (x, c) => { c.copy(zk = x) } } text("Zookeeper connection string, including any chroot path")
     opt[Unit]("confirm") optional() action { (_, c) =>
       c.copy(confirm = false) } text("Assume the operation is confirmed, don't prompt")
+    opt[Unit]("debug") optional() action { (_, c) =>
+      c.copy(outputLevel = Level.DEBUG) } text("debug output")
+    opt[Unit]("quiet") optional() action { (_, c) =>
+      c.copy(outputLevel = Level.WARN) } text("less output")
     cmd("clusterstatus") action { (_, c) =>
       c.copy(mode = "clusterstatus") } text("Print current cluster status")
     cmd("populate") action { (_, c) =>
@@ -103,6 +110,7 @@ object CLI extends App {
     config =>
       implicit val clusterManager = new ClusterManager(config.zk)
       val startState = clusterManager.currentState
+      ManagerConsoleLogging.setLevel(config.outputLevel)
 
       var success = false
       try {
@@ -117,8 +125,8 @@ object CLI extends App {
           case "populate" => {
             val nodesWithCollection = startState.nodesWithCollection(config.collection)
             if (nodesWithCollection.size > 1) {
-              println("It doesn't look like we're populating from a single indexer node, as expected")
-              println(s"Collection ${config.collection} appears to exist on the following nodes: ${nodesWithCollection.mkString(", ")}")
+              comment.warn("It doesn't look like we're populating from a single indexer node, as expected")
+              comment.warn(s"Collection ${config.collection} appears to exist on the following nodes: ${nodesWithCollection.mkString(", ")}")
               exit(1)
             }
             val originatingNode = nodesWithCollection.head // highlander
@@ -173,10 +181,10 @@ object CLI extends App {
 
         // get user confirmation, if necessary
         if (config.confirm && operation.nonEmpty) {
-          println(operation.prettyPrint)
+          comment.warn(operation.prettyPrint)
           val input = readLine("Seem reasonable? [y]> ")
           if (input.toLowerCase.contains("n")) {
-            println("Aborting.")
+            comment.warn("Aborting.")
             exit(1)
           }
         }
@@ -184,7 +192,7 @@ object CLI extends App {
         //execute the operation
         success = operation.execute(clusterManager)
       } catch {
-        case m: ManagerException => println(m.getMessage)
+        case m: ManagerException => comment.warn(m.getMessage)
       }
       exit(if (success) 0 else 1)
   })
@@ -195,7 +203,7 @@ object CLI extends App {
    */
   def exit(status: Int)(implicit clusterManager: ClusterManager): Unit = {
     clusterManager.shutdown()
-    println(if (status == 0) "SUCCESS" else "FAILURE")
+    comment.warn(if (status == 0) "SUCCESS" else "FAILURE")
     sys.exit(status)
   }
 }
