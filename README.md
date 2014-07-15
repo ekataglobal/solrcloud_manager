@@ -5,9 +5,10 @@ SolrCloud Manager
 Provides protected access to the collections API for cluster management.
  
 Command-line syntax, with extra protection against doing Bad Things, for example:
-    * deleting the last replica for a given slice
-    * creating a collection that doesn't reference a known config in ZK
-    * deleting a collection out from under an alias
+
+* deleting the last replica for a given slice
+* creating a collection that doesn't reference a known config in ZK
+* deleting a collection out from under an alias
 
 Also provides some advanced cluster-manipulation actions, see the relevant section below.
 
