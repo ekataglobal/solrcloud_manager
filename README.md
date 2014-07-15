@@ -2,7 +2,7 @@
 SolrCloud Manager
 =================
 
-Provides protected access to the collections API for cluster management.
+Provides easy SolrCloud cluster management.
  
 Command-line syntax, with extra protection against doing Bad Things, for example:
 
@@ -59,7 +59,9 @@ collection names slices "shardX", so this confusion probably isn't going away an
 usually safe to use these words interchangeably to indicate the logical partition.
 
 Additionally, "node" here refers to a physical host machine running solr. A node specifier takes the format
-    &lt;IP address&gt;:&lt;port&gt;_solr
+
+    <IP address>:<port>_solr
+
 Solr always uses the IP address in a node specification, but this tool will do hostname translation if you specify that.
 If your servlet isn't bound to /solr, give it a try anyway, but there may be bugs.
 
@@ -78,12 +80,15 @@ This gets you an index without impacting current nodes.
 optionally clean up by wiping the shards from the index node so you can cleanly remove it from the cluster again.
 
 **fill**:
-Adds replicas to nodes not currently participating in a given collection, starting with the slices with the
+Adds replicas to nodes not currently/fully participating in a given collection, starting with the slices with the
 lowest replica count.
     
 The number of replicas per node will not exceed the number of replicas per node for the collection
 prior to running this command. May result in uneven replica counts across slices, if extra capacity wasn't 
 evenly divisible.
+
+Note that "participation" for a node is determined by slice count for the _given_ collection, not slice 
+count across _all_ collections. 
     
 **clean**:
 Removes any replicas in a given collection that are not currently marked "active". A node doesn't have to be
