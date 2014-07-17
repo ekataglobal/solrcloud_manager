@@ -142,7 +142,7 @@ object CLI extends App with ManagerSupport {
             Operations.fillCluster(clusterManager, config.collection)
           }
           case "addreplica" => {
-            Operation(Seq(AddReplica(config.collection, config.slice, config.node)))
+            Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))
           }
           case "deletereplica" => {
             Operation(Seq(DeleteReplica(config.collection, config.slice, startState.canonicalNodeName(config.node), config.safetyFactor)))

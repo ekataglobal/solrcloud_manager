@@ -20,7 +20,7 @@ Assumes you're handling ALL collection configuration data in ZooKeeper.
 Assumes Solr >= 4.8. Specifically, the ADDREPLICA collections API command was added in 4.8. Earlier cluster versions
 may work if you don't need to add replicas, but this is untested.
 
-Requires Scala & SBT. Installing sbt-extras will handle getting these for you: https://github.com/paulp/sbt-extras
+Requires Scala & SBT. Installing sbt-extras will handle getting and managing these for you: https://github.com/paulp/sbt-extras
 
 Basic commandline usage:
 =======================
@@ -92,12 +92,12 @@ count across _all_ collections.
     
 **clean**:
 Removes any replicas in a given collection that are not currently marked "active". A node doesn't have to be
-up for it's replicas to be removed.
+up for its replicas to be removed.
     
 **copy**:
 Provides a method of doing **cross cluster** bulk data deployment. Several caveats:
     
-1. The collection must exist in both clusters
+1. The collection MUST exist in both clusters.
 1. The collections in each cluster MUST have the same number of slices - hashing MUST be identical.
 1. The collection you're copying into should be empty - if it isn't, solr may silently decide a slice is
 newer than the data you're trying to copy, and fail to do so.
@@ -107,7 +107,7 @@ TODO:
 =====
 
 * More consistent exception responses and handling (Use ManagerException more)
-* Solr version detection
+* Solr version detection and failover to older APIs if possible
 * Better introspection of solr responses
 * Insure paths other than /solr work
 
@@ -127,11 +127,12 @@ the config doesn't exist. This leaves you with cores that can't initialize, whic
     1. Trying to delete the collection fails because the cores can't be loaded
     1. You have to stop each node, and remove the core directories
 1. (w) SOLR-5128 - Handling slice/replica assignment to nodes must be done manually because the maxShardsPerNode setting can't be 
-changed after CREATECOLLECTION.
+changed after CREATECOLLECTION. As a result, this tool ignores maxShardsPerNode completely, aside from CREATECOLLECTION.
 1. (w) SOLR-5970 - Some collections api requests return status of 0 in the responseHeader, despite a failure. 
 (CREATECOLLECTION in non-async, maybe others)
 1. (w) If you DELETEREPLICA the **last** replica for a given shard, you get an error like 
-   "Invalid shard name : shard2 in collection : collection1", but the replica **is** actually removed from the clusterstate
+   "Invalid shard name : shard2 in collection : collection1", but the replica **is** actually removed from the clusterstate,
+   leaving you with a broken collection
 1. You can have two replicas of the same slice on the same node (This tool provides some additional protection around the ADDREPLICA 
     command, but not at collection creation time)
 1. Running a Collection API command using the "async" feature hides the actual error message, if there was one

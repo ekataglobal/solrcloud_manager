@@ -78,17 +78,24 @@ trait Action extends ManagerSupport {
       val req = new QueryRequest(params)
       req.setPath(path)
       comment.debug(s"REQUEST: ${req.getPath} ${req.getParams}")
-      Try(client.request(req)).map(GenericSolrResponse)
+      val response = Try(client.request(req)).map(GenericSolrResponse)
+      response match {
+        case Success(r) =>
+          comment.debug(s"RESPONSE: $r")
+        case Failure(e) =>
+          comment.debug(s"RESPONSE (exception): $e")
+      }
+      response
     }
 
     def submitRequest(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections"): Boolean = {
       val response = getSolrResponse(client, params, path)
       response match {
-        case Success(r) => {
-          comment.debug(s"RESPONSE: $response")
+        case Success(r) =>
           checkStatus(r)
-        }
-        case Failure(e) => comment.warn(s"Request failed: $e"); false
+        case Failure(e) =>
+          comment.warn(s"Request failed: $e")
+          false
       }
     }
 
@@ -170,7 +177,6 @@ trait Action extends ManagerSupport {
       checkResponse match {
         case Success(r) if checkReplicationStatusResponse(r) => {
           val rsp = ReplicationStateResponse(r.rsp)
-          comment.debug(s"RESPONSE: $r")
           val remaining = checkRemainingReplicationTime(rsp).seconds
           if (remaining == 0.seconds) {
             true
