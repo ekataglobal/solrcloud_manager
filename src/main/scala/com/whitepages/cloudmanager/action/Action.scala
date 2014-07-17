@@ -185,7 +185,7 @@ trait Action extends ManagerSupport {
           }
           else {
             comment.info(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
-            Thread.sleep(Math.min(remaining.toMillis / 2, 1000))
+            Thread.sleep(Math.max(remaining.toMillis / 2, 1000))
             waitForReplication(client, node)
           }
         }
