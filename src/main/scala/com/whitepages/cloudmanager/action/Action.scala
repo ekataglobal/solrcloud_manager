@@ -162,10 +162,11 @@ trait Action extends ManagerSupport {
       (rsp.replicating, rsp.replicationTimeRemaining) match {
         case (None, _) => 1 // the appropriate node hasn't shown up yet
         case (Some("false"), _) => 0 // all done
-        case (Some(_), Some(remaining)) =>
+        case (Some(_), Some(remaining)) if remaining == 0.seconds =>
           // the timeRemaining estimate initializes to 0 seconds, so ignore zeros and give it time to build a real estimate
-          Math.max(remaining.toSeconds.toInt, 10)
-        case (Some(_), None) => 10 // we're replicating, but for some reason we can't tell how long is remaining
+          5
+        case (Some(_), Some(remaining)) => remaining.toSeconds.toInt
+        case (Some(_), None) => 5 // we're replicating, but for some reason we can't tell how long is remaining
       }
     }
 
