@@ -1,6 +1,6 @@
 name := "solrcloud_manager"
 
-organization := "com.randomstatistic"
+organization := "com.whitepages"
 
 version := "0.1"
 
