@@ -10,6 +10,8 @@ fork in Test := true
 
 javaOptions += "-ea"
 
+resolvers += "Restlet Repository" at "http://maven.restlet.org"
+
 libraryDependencies ++= Seq(
   "org.apache.solr"      %  "solr-test-framework" % "4.9.0" % "test",     // must precede solrj in the classpath
   "org.scalatest"        %% "scalatest"           % "2.1.6" % "test",
