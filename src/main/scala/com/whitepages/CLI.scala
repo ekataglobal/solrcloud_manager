@@ -194,7 +194,10 @@ object CLI extends App with ManagerSupport {
       } catch {
         case m: ManagerException => comment.warn(m.getMessage)
       }
-      exit(if (success) 0 else 1)
+
+      if (!success) exit(1)
+      comment.warn("SUCCESS")
+      clusterManager.shutdown()
   })
 
   /**

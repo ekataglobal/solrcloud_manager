@@ -114,8 +114,8 @@ TODO:
 Issues:
 =======
 
-The collections API currently has several issues. 
-This tool currently works around some of them, marked (w)
+As of Solr 4.9, The collections API currently has several issues. 
+This tool protects you from some of them, marked (w)
 
 Collections API Issues:
 
@@ -142,3 +142,8 @@ IntelliJ Issues:
 In IntelliJ's SBT import, the artifact inclusion order defined in build.sbt isn't respected properly. 
 After importing the project,
 Go to File->Project Structure->Modules and make sure the "test-framework" jars appear before the "core" jars.
+
+Running in SBT:
+
+If running in sbt, you may get an exception message "sbt.TrapExitSecurityException thrown from the UncaughtExceptionHandler in thread"
+at the end of execution. This is due to the code using System.exit in the SBT context, and can be ignored.
