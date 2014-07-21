@@ -13,6 +13,8 @@ import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
 import org.slf4j.LoggerFactory
 import org.apache.log4j.Level
+import scala.util.control.NonFatal
+import scala.annotation.tailrec
 
 
 object CLI extends App with ManagerSupport {
@@ -108,12 +110,14 @@ object CLI extends App with ManagerSupport {
     // argument error, the parser should have already informed the user
   })({
     config =>
-      implicit val clusterManager = new ClusterManager(config.zk)
-      val startState = clusterManager.currentState
+      implicit var possibleClusterManager: Option[ClusterManager] = None // defer until we're protected from exceptions
       ManagerConsoleLogging.setLevel(config.outputLevel)
-
       var success = false
+
       try {
+        val clusterManager = new ClusterManager(config.zk)
+        possibleClusterManager = Some(clusterManager)     // stash for later shutdown
+        val startState = clusterManager.currentState
 
         // get the requested operation
         val operation: Operation = config.mode match {
@@ -193,20 +197,35 @@ object CLI extends App with ManagerSupport {
         success = operation.execute(clusterManager)
       } catch {
         case m: ManagerException => comment.warn(m.getMessage)
+        case NonFatal(e) => comment.warn(getRootCause(e).getMessage)
       }
 
       if (!success) exit(1)
       comment.warn("SUCCESS")
-      clusterManager.shutdown()
+      possibleClusterManager.foreach(_.shutdown())
   })
 
   /**
-   * sys.addShutdownHook wasn't working well for this, so kludge something else to handle clean client shutdown
+   * sys.addShutdownHook doesn't work reliably when running in SBT, so kludge something else to handle clean client shutdown
    * @param status Command-line result code (so 0 is success, anything else is a failure)
    */
-  def exit(status: Int)(implicit clusterManager: ClusterManager): Unit = {
-    clusterManager.shutdown()
+  def exit(status: Int)(implicit possibleClusterManager: Option[ClusterManager]): Unit = {
+    possibleClusterManager.foreach(_.shutdown())
     comment.warn(if (status == 0) "SUCCESS" else "FAILURE")
     sys.exit(status)
+  }
+
+  /**
+   * Gets the first-order exception for a given exception.
+   * It's really mind-boggling to me this isn't part of the Throwable class.
+   * @param e Some exception
+   * @return The exception at the bottom of the getCause nesting
+   */
+  @tailrec
+  def getRootCause(e: Throwable): Throwable = {
+    e.getCause match {
+      case null => e
+      case e: Throwable => getRootCause(e)
+    }
   }
 }

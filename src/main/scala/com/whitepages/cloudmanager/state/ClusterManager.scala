@@ -1,9 +1,9 @@
 package com.whitepages.cloudmanager.state
 
-import org.apache.solr.common.cloud.ZkStateReader
+import org.apache.solr.common.cloud.{ZooKeeperException, ZkStateReader}
 import scala.collection.JavaConverters._
 import org.apache.solr.client.solrj.impl.CloudSolrServer
-import com.whitepages.cloudmanager.ManagerSupport
+import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
 
 /**
  * Encapsulates the methods of getting and setting state in the cluster
@@ -12,8 +12,12 @@ import com.whitepages.cloudmanager.ManagerSupport
  */
 case class ClusterManager(client: CloudSolrServer) extends ManagerSupport {
   def this(zk: String) = this(new CloudSolrServer(zk))
-  
-  client.connect()
+
+  try {
+    client.connect()
+  } catch {
+    case e: ZooKeeperException => throw new ManagerException("Couldn't find solrcloud configuration in Zookeeper")
+  }
   val stateReader = client.getZkStateReader
 
   def currentState = {
