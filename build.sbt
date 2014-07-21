@@ -1,3 +1,5 @@
+import com.typesafe.sbt.SbtStartScript
+
 name := "solrcloud_manager"
 
 organization := "com.whitepages"
@@ -9,6 +11,8 @@ scalaVersion := "2.10.3"
 fork in Test := true
 
 javaOptions += "-ea"
+
+SbtStartScript.startScriptForJarSettings
 
 resolvers += "Restlet Repository" at "http://maven.restlet.org"
 
