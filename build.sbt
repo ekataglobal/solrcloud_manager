@@ -1,5 +1,7 @@
 import com.typesafe.sbt.SbtStartScript
 
+import AssemblyKeys._
+
 name := "solrcloud_manager"
 
 organization := "com.whitepages"
@@ -13,6 +15,8 @@ fork in Test := true
 javaOptions += "-ea"
 
 SbtStartScript.startScriptForJarSettings
+
+assemblySettings
 
 resolvers += "Restlet Repository" at "http://maven.restlet.org"
 
