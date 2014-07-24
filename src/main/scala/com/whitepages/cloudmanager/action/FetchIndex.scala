@@ -30,15 +30,12 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String) extend
     // don't use a CloudSolrServer for this stuff, go to the node directly
     val client = new HttpSolrServer(s"http://${targetReplica.node}/solr/")
     val fromClient = new HttpSolrServer(fromUrl)
-    val commitParams = new ModifiableSolrParams()
-    commitParams.set("commit", "true")
 
     val params = new ModifiableSolrParams
     params.set("command", "fetchindex")
     params.set("masterUrl", fromUrl + fromCore)
     SolrRequestHelpers.submitRequest(client, params, s"/$toCore/replication") &&
       ReplicationHelpers.waitForReplication(client, toCore) &&
-      SolrRequestHelpers.submitRequest(client, commitParams, s"/$toCore/update") &&
       insureDataCopy(fromClient, client)
   }
 
