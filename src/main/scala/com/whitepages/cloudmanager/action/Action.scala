@@ -135,7 +135,7 @@ trait Action extends ManagerSupport {
           }
           else {
             comment.info(s"Waiting for async request $requestId")
-            Thread.sleep(asyncPause.toMillis)
+            delay(asyncPause)
             monitorAsyncRequest(client, requestId)
           }
         }
@@ -166,7 +166,7 @@ trait Action extends ManagerSupport {
           // the timeRemaining estimate initializes to 0 seconds, so ignore zeros and give it time to build a real estimate
           5
         case (Some(_), Some(remaining)) => remaining.toSeconds.toInt
-        case (Some(_), None) => 5 // we're replicating, but for some reason we can't tell how long is remaining
+        case (Some(_), None) => 1 // we're replicating, but for some reason we can't tell how long is remaining
       }
     }
 
@@ -186,7 +186,7 @@ trait Action extends ManagerSupport {
           }
           else {
             comment.info(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
-            Thread.sleep(Math.max(remaining.toMillis / 2, 1000))
+            delay(Math.max(remaining.toMillis / 2, 1000))
             waitForReplication(client, node)
           }
         }

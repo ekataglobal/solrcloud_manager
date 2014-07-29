@@ -3,6 +3,7 @@ package com.whitepages.cloudmanager.action
 import com.whitepages.cloudmanager.state.{ClusterManager, SolrState}
 import scala.annotation.tailrec
 import com.whitepages.cloudmanager.ManagerSupport
+import scala.concurrent.duration._
 
 object Conditions extends ManagerSupport {
   def collectionExists(collection: String) = (state: SolrState) => state.collections.contains(collection)
@@ -19,6 +20,13 @@ object Conditions extends ManagerSupport {
       case None => false
     }
 
+  /**
+   * Doesn't return until the condition is satisfied, or the timeout is reached
+   * @param stateFactory
+   * @param condition
+   * @param timeoutSec In seconds, default 300. Use -1 for no timeout.
+   * @return
+   */
   @tailrec
   def waitForState(stateFactory: ClusterManager, condition: (SolrState) => Boolean, timeoutSec: Int = 300): Boolean = {
     condition(stateFactory.currentState) match {
@@ -26,7 +34,7 @@ object Conditions extends ManagerSupport {
       case false if timeoutSec == 0 => false
       case false if (timeoutSec > 0 || timeoutSec < 0) => {
         if (timeoutSec % 10 == 0) comment.debug("Waiting for condition")
-        Thread.sleep(1000)
+        delay(1.second)
         // if a -1 timeout was initially used, this could int-overflow in about 70 years. Oh well.
         waitForState(stateFactory, condition, timeoutSec - 1)
       }

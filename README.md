@@ -98,9 +98,11 @@ up for its replicas to be removed.
 Provides a method of doing **cross cluster** bulk data deployment. Several caveats:
     
 1. The collection MUST exist in both clusters.
-1. The collections in each cluster MUST have the same number of slices - hashing MUST be identical.
+1. The collections in each cluster MUST have the same number of slices. Hashing MUST be identical, and there's 
+no check for this!
 1. The collection you're copying into should be empty - if it isn't, solr may silently decide a slice is
 newer than the data you're trying to copy, and fail to do so.
+1. Don't forget to hard-commit on the cluster you're copying from before you start
 
     
 TODO:

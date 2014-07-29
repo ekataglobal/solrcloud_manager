@@ -16,7 +16,12 @@ import com.whitepages.cloudmanager.action.CreateCollection
 import scala.Some
 import com.whitepages.cloudmanager.state.ClusterManager
 import com.whitepages.cloudmanager.action.DeleteReplica
-
+import org.apache.solr.common.SolrInputDocument
+import org.apache.solr.client.solrj.{SolrQuery, SolrRequest}
+import org.apache.solr.client.solrj.request.{QueryRequest, UpdateRequest}
+import scala.collection.JavaConverters._
+import scala.util.Random
+import org.apache.solr.common.params.ModifiableSolrParams
 
 @SolrTestCaseJ4.SuppressSSL
 @RunWith(classOf[RandomizedRunner])
@@ -34,6 +39,7 @@ class ActionTest extends ManagerTestBase {
     testAddRemoveReplica(clusterManager)
     testAlias(clusterManager)
     testCreateDeleteCollection(clusterManager)
+    testFetchIndex(clusterManager)
 
   }
 
@@ -84,5 +90,55 @@ class ActionTest extends ManagerTestBase {
     assertTrue(Operation(Seq(DeleteCollection("testcollection"))).execute(cloudClient))
     assertFalse(clusterManager.currentState.collections.contains("testcollection"))
   }
+
+  def testFetchIndex(clusterManager: ClusterManager): Unit = {
+    val state = clusterManager.currentState
+    val initialNode = state.liveNodes.head
+    val targetNode = state.liveNodes.tail.head
+    val createFullCollectionAction = CreateCollection("fetchfrom", 1, "conf1", Some(1), None, Some(Seq(initialNode)))
+    assertTrue(Operation(Seq(createFullCollectionAction)).execute(cloudClient))
+    val createEmptyCollectionAction = CreateCollection("fetchinto", 1, "conf1", Some(1), None, Some(Seq(targetNode)))
+    assertTrue(Operation(Seq(createEmptyCollectionAction)).execute(cloudClient))
+
+    def collectionSize(coll: String) = {
+      val defaultCollection = cloudClient.getDefaultCollection
+      cloudClient.setDefaultCollection(coll)
+
+      val countQuery = new SolrQuery()
+      countQuery.setQuery( "*:*" )
+      val indexedCount = cloudClient.query(countQuery).getResults.getNumFound
+
+      cloudClient.setDefaultCollection(defaultCollection)
+      indexedCount
+    }
+
+    val numDocs = 3
+    val docs = Range(0, numDocs).map{ _ =>
+      val doc = new SolrInputDocument
+      addRandFields(doc)
+      doc.addField("id", Random.nextInt())
+      doc
+    }.asJava
+    val req = new UpdateRequest()
+    req.add(docs)
+    val defaultCollection = cloudClient.getDefaultCollection
+    cloudClient.setDefaultCollection("fetchfrom")
+    cloudClient.request(req)
+    cloudClient.commit()
+    cloudClient.setDefaultCollection(defaultCollection)
+    assertEquals(numDocs, collectionSize("fetchfrom"))
+
+    // url-encode any slashes in the hostContext besides the first
+    val hostContext = "/" + java.net.URLEncoder.encode(System.getProperty("hostContext").tail, "UTF-8")
+    println("HostContext: " + System.getProperty("hostContext") + " becomes " + hostContext)
+    println("targetNode: " + targetNode)
+    assertTrue(Operation(Seq(FetchIndex("fetchfrom_shard1_replica1", "fetchinto_shard1_replica1", targetNode, hostContext))).execute(cloudClient))
+    assertEquals(numDocs, collectionSize("fetchinto"))
+
+    // clean up
+    assertTrue(Operation(Seq(DeleteCollection("fetchfrom"))).execute(cloudClient))
+    assertTrue(Operation(Seq(DeleteCollection("fetchinto"))).execute(cloudClient))
+  }
+
 
 }
