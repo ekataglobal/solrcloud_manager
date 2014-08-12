@@ -1,6 +1,6 @@
 package com.whitepages.cloudmanager.action
 
-import com.whitepages.cloudmanager.state.{ReplicationStateResponse, ClusterManager}
+import com.whitepages.cloudmanager.state.{LukeStateResponse, ReplicationStateResponse, ClusterManager}
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.client.solrj.impl.HttpSolrServer
 import org.apache.solr.client.solrj.SolrServer
@@ -46,23 +46,23 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
 
   private def insureDataCopy(fromClient: SolrServer, toClient: SolrServer): Boolean = {
     val detailsParams = new ModifiableSolrParams()
-    detailsParams.set("command", "details")
-    val fromResponse = SolrRequestHelpers.getSolrResponse(fromClient, detailsParams, s"/$fromCore/replication")
-    val toResponse = SolrRequestHelpers.getSolrResponse(toClient, detailsParams, s"/$toCore/replication")
+    detailsParams.set("show", "index")
+    val fromResponse = SolrRequestHelpers.getSolrResponse(fromClient, detailsParams, s"/$fromCore/admin/luke")
+    val toResponse = SolrRequestHelpers.getSolrResponse(toClient, detailsParams, s"/$toCore/admin/luke")
     (fromResponse, toResponse) match {
       case (Failure(e), _) => false
       case (_, Failure(e)) => false
       case (Success(fromRsp), Success(toRsp)) => {
         // running out of names here.
-        val from = ReplicationStateResponse(fromRsp.rsp)
-        val to = ReplicationStateResponse(toRsp.rsp)
+        val from = LukeStateResponse(fromRsp.rsp)
+        val to = LukeStateResponse(toRsp.rsp)
 
-        if (from.generation != to.generation) {
-          comment.warn(s"Index generation doesn't match, from: ${from.generation}, to: ${to.generation}")
+        if (from.numDocs != to.numDocs) {
+          comment.warn(s"Index doc count doesn't match, from: ${from.numDocs}, to: ${to.numDocs}")
           false
         }
-        else if (from.indexVersion != to.indexVersion) {
-          comment.warn(s"Index version doesn't match, from: ${from.indexVersion}, to: ${to.indexVersion}")
+        else if (from.version != to.version) {
+          comment.warn(s"Index version doesn't match, from: ${from.version}, to: ${to.version}")
           false
         }
         else true

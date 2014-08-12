@@ -43,3 +43,9 @@ case class ReplicationStateResponse(rsp: NamedList[AnyRef]) extends SolrResponse
   lazy val generation = walk("details", "generation")
   lazy val indexVersion = walk("details", "indexVersion")
 }
+
+case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
+  lazy val numDocs = walk("index", "numDocs").map(_.toInt)
+  lazy val version = walk("index", "version")
+  lazy val current = walk("index", "current").map(s => if (s == "true") true else false)
+}
