@@ -4,7 +4,7 @@ SolrCloud Manager
 
 Provides easy SolrCloud cluster management.
  
-Command-line syntax, with extra protection against doing Bad Things, for example:
+Command-line syntax, with extra protection against doing Bad Things. Some example Bad Things this helps with:
 
 * deleting the last replica for a given slice
 * creating a collection that doesn't reference a known config in ZK
@@ -15,7 +15,8 @@ Also provides some advanced cluster-manipulation actions, see the relevant secti
 Prerequisites:
 ==============
 
-Assumes you're handling ALL collection configuration data in ZooKeeper.
+Assumes you're handling ALL collection configuration data in ZooKeeper. (I use -Dsolr.solrxml.location=zookeeper too, 
+although that probably isn't required)
 
 Assumes Solr >= 4.8. Specifically, the ADDREPLICA collections API command was added in 4.8. Earlier cluster versions
 may work if you don't need to add replicas, but this is untested.
@@ -34,14 +35,19 @@ Some examples:
 
     # Show cluster state:
     sbt "run -z zk0.example.com:2181/myapp"
+    
     # create a collection
     sbt "run createcollection -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf"
     # add a replica
     sbt "run addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com:8980_solr"
+    
     # Use any fresh nodes in the cluster to increase your replication factor
     sbt "run fill -z zk0.example.com:2181/myapp -c collection1"
     # Remove any replicas not marked "active"
     sbt "run clean -z zk0.example.com:2181/myapp -c collection1"
+    
+If you don't want to run in SBT, or want a way to deploy the tool, "sbt assembly" should produce a stand-alone fat jar, 
+which you can run with a simple java command.
 
 
 Terminology:
@@ -112,6 +118,7 @@ TODO:
 * Solr version detection and failover to older APIs if possible
 * Better introspection of solr responses
 * Insure paths other than /solr work
+* Pretty-print operation output
 
 Issues:
 =======
