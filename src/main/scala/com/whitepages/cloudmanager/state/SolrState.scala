@@ -80,21 +80,6 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
   def nodesWithCollection(collection: String) = replicasFor(collection).map(_.node).distinct
   def nodesWithoutCollection(collection: String) = liveNodes -- nodesWithCollection(collection)
 
-
-  private[this] final val coreNameConventionPat = new Regex("""shard(\d+)_replica(\d+)""", "shardNum", "replicaNum")
-  private[this] final val coreNameConvention = """%s_shard%s_replica%s"""
-  def nextCoreNameFor(collection: String, sliceName: String) = {
-    val lastReplica = replicasFor(collection, sliceName).map(_.core).map { name =>
-      coreNameConventionPat.findFirstIn(name) match {
-        case Some(coreNameConventionPat(shardNum, replicaNum)) => (shardNum.toInt, replicaNum.toInt)
-        case None => (0,0)
-      }
-    }.sorted.last
-
-    coreNameConvention.format(collection, lastReplica._1, lastReplica._2 + 1)
-  }
-
-
   def canonicalNodeName(hostIndicator: String): String = {
     if (liveNodes.contains(hostIndicator)) {
       hostIndicator
