@@ -29,15 +29,16 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
 
   override def execute(clusterManager: ClusterManager): Boolean = {
     val targetReplica = clusterManager.currentState.allReplicas.filter( (r) => r.core == toCore).head
-    val fromUrl = s"http://$fromNode/$hostContext"
+    val fromUrl = s"http://$fromNode$hostContext"
 
     // don't use a CloudSolrServer for this stuff, go to the node directly
-    val client = new HttpSolrServer(s"http://${targetReplica.node}/$hostContext")
+    val client = new HttpSolrServer(s"http://${targetReplica.host}")
     val fromClient = new HttpSolrServer(fromUrl)
 
     val params = new ModifiableSolrParams
     params.set("command", "fetchindex")
     params.set("masterUrl", fromUrl + "/" + fromCore)
+
     SolrRequestHelpers.submitRequest(client, params, s"/$toCore/replication") &&
       delay(5.seconds) &&
       ReplicationHelpers.waitForReplication(client, toCore) &&

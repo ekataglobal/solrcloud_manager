@@ -97,7 +97,7 @@ object CLI extends App with ManagerSupport {
     cmd("copy") action { (_, c) =>
       c.copy(mode = "copy") } text("Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
-        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a node (any node) in the cluster to copy FROM, ie 'foo.QA.com:8983'")
+        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983'")
       )
     checkConfig{
       c =>

@@ -128,7 +128,7 @@ class OperationsTest extends ManagerTestBase {
 
     // shut down one of the nodes
     controlJetty.stop()
-    Thread.sleep(1000)
+    Thread.sleep(2000)
 
     assertTrue(Operations.cleanCluster(clusterManager, "testcollection").execute(cloudClient))
     assertEquals("only one node has the collection", 1, clusterManager.currentState.nodesWithCollection("testcollection").length)

@@ -6,8 +6,14 @@ import scala.collection.JavaConverters._
 import java.net.InetAddress
 import com.whitepages.cloudmanager.{ManagerSupport, ManagerException}
 
-
+object SolrReplica {
+  def hostName(nodeName: String) = {
+    val chunks = nodeName.split(':')
+    InetAddress.getByName(chunks.head).getCanonicalHostName + ":" + chunks.tail.mkString("").replace('_','/')
+  }
+}
 case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
+  import SolrReplica._
   lazy val leader = slice.getLeader == replica
   lazy val activeSlice = slice.getState == Slice.ACTIVE
   lazy val activeReplica = replica.getStr(ZkStateReader.STATE_PROP) == ZkStateReader.ACTIVE
@@ -17,6 +23,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
   lazy val replicaName = replica.getName
   lazy val url = replica.get("base_url")
   lazy val node = replica.getNodeName
+  lazy val host = hostName(node)
 }
 
 case class SolrState(state: ClusterState) extends ManagerSupport {
@@ -32,7 +39,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
   def printReplicas() {
     comment.info("Nodes:")
     for { node <- allNodes } {
-      val nodeName = hostName(node)
+      val nodeName = SolrReplica.hostName(node)
       comment.info(
         nodeName +
           " (" +
@@ -48,7 +55,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
         replica.collection,
         replica.sliceName.+(if (replica.leader) "*" else ""),
         replica.replicaName,
-        hostName(replica.node),
+        replica.host,
         replica.activeSlice,
         replica.active,
         replica.core
@@ -99,8 +106,4 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
 
   }
 
-  def hostName(nodeName: String) = {
-    val chunks = nodeName.split(':')
-    InetAddress.getByName(chunks.head).getCanonicalHostName + ":" + chunks.tail.mkString("").replace('_','/')
-  }
 }

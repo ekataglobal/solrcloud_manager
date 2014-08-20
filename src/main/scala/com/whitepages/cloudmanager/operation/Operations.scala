@@ -159,7 +159,6 @@ object Operations extends ManagerSupport {
    */
   def deployFromAnotherCluster(clusterManager: ClusterManager, collection: String, deployFrom: String): Operation = {
     def firstCore(coreName: String) = coreName.replaceAll("""replica\d""", "replica1")
-    def node2host(nodeName: String) = nodeName.substring(0, nodeName.indexOf('_'))
 
     val state = clusterManager.currentState
     val replicaGroup = state.replicasFor(collection).groupBy(_.sliceName).values.toList.sortBy(_.head.core)
@@ -167,7 +166,7 @@ object Operations extends ManagerSupport {
       val (leader, copies) = replicas.partition(_.leader)
       Operation(
         leader.flatMap( (r) =>
-          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, node2host(r.node)))
+          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, r.host))
         )
       )
     }
