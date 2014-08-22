@@ -166,7 +166,7 @@ object Operations extends ManagerSupport {
       val (leader, copies) = replicas.partition(_.leader)
       Operation(
         leader.flatMap( (r) =>
-          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, r.host))
+          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, r.host, ""))
         )
       )
     }
