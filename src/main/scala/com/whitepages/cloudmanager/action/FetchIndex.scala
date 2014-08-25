@@ -62,10 +62,6 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
           comment.warn(s"Index doc count doesn't match, from: ${from.numDocs}, to: ${to.numDocs}")
           false
         }
-        else if (from.version != to.version) {
-          comment.warn(s"Index version doesn't match, from: ${from.version}, to: ${to.version}")
-          false
-        }
         else true
 
       }
