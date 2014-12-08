@@ -179,6 +179,11 @@ object CLI extends App with ManagerSupport {
             )))
           }
           case "copy" => {
+            if (!Conditions.collectionExists(config.collection)(clusterManager.currentState)) {
+              comment.warn(s"Can't copy into non-existent target collection ${config.collection}")
+              exit(1)
+            }
+
             Operations.deployFromAnotherCluster(clusterManager, config.collection, config.alternateHost)
           }
         }
