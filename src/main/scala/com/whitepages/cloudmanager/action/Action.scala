@@ -186,7 +186,8 @@ trait Action extends ManagerSupport {
           }
           else {
             comment.info(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
-            delay(Math.max(remaining.toMillis / 2, 1000))
+            val delayMillis = if (remaining > 600.seconds) 300.seconds.toMillis else remaining.toMillis / 2
+            delay(Math.max(delayMillis, 1000))
             waitForReplication(client, node)
           }
         }
