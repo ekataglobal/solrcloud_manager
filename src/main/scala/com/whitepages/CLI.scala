@@ -34,6 +34,7 @@ object CLI extends App with ManagerSupport {
                         maxShardsPerNode: Option[Int] = None,
                         replicationFactor: Option[Int] = None,
                         createNodeSet: Option[Seq[String]] = None,
+                        asyncOps: Boolean = false,
                         alternateHost: String = "",
                         outputLevel: Level = Level.INFO
   )
@@ -92,7 +93,9 @@ object CLI extends App with ManagerSupport {
         opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the config to use for this collection"),
         opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("When auto-assigning slices, don't allow more than this per node. Default 1"),
         opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("The desired number of replicas (1-based, default 1)"),
-        opt[String]("nodes") optional() action { (x, c) => { c.copy(createNodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)")
+        opt[String]("nodes") optional() action { (x, c) => { c.copy(createNodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)"),
+        opt[Unit]("async") optional() action { (_, c) =>
+          c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts.")
       )
     cmd("copy") action { (_, c) =>
       c.copy(mode = "copy") } text("Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
@@ -175,7 +178,8 @@ object CLI extends App with ManagerSupport {
               config.configName,
               config.maxShardsPerNode,
               config.replicationFactor,
-              normalizedNodes
+              normalizedNodes,
+              config.asyncOps
             )))
           }
           case "copy" => {

@@ -16,7 +16,7 @@ case class ClusterManager(client: CloudSolrServer) extends ManagerSupport {
   try {
     client.connect()
   } catch {
-    case e: ZooKeeperException => throw new ManagerException("Couldn't find solrcloud configuration in Zookeeper")
+    case e: ZooKeeperException => throw new ManagerException("Couldn't find solrcloud configuration in Zookeeper: " + e)
   }
   val stateReader = client.getZkStateReader
 

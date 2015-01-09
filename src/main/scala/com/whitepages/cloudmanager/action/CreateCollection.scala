@@ -36,7 +36,8 @@ case class CreateCollection(collection: String,
                             configName: String,
                             maxShardsPerNode: Option[Int] = None,
                             replicationFactor: Option[Int] = None,
-                            createNodeSet: Option[Seq[String]] = None) extends Action {
+                            createNodeSet: Option[Seq[String]] = None,
+                            async: Boolean = false ) extends Action {
   import CreateCollection._
 
   override val preConditions: List[StateCondition] = List(
@@ -56,7 +57,12 @@ case class CreateCollection(collection: String,
       replicationFactor.map(params.set("replicationFactor", _))
       createNodeSet.map((ns) => params.set("createNodeSet", ns.mkString(",")))
 
-      SolrRequestHelpers.submitAsyncRequest(client, params) && Conditions.waitForState(clusterManager, Conditions.activeCollection(collection))
+      val submitResult =
+        if (async)
+          SolrRequestHelpers.submitAsyncRequest(client, params) && Conditions.waitForState(clusterManager, Conditions.activeCollection(collection))
+        else
+          SolrRequestHelpers.submitRequest(client, params)
+      submitResult && Conditions.waitForState(clusterManager, Conditions.activeCollection(collection))
     } else false
 
   }
