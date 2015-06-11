@@ -38,8 +38,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
   ).mkString("\t")
   def printReplicas() {
     comment.info("Nodes:")
-    for { node <- allNodes } {
-      val nodeName = SolrReplica.hostName(node)
+    for { (node, nodeName) <- (allNodes.toList zip allNodes.toList.map(SolrReplica.hostName)).sortBy(_._2) } {
       comment.info(
         nodeName +
           " (" +
