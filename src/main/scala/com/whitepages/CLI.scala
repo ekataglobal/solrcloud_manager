@@ -210,7 +210,7 @@ object CLI extends App with ManagerSupport {
       }
 
       if (!success) exit(1)
-      comment.warn("SUCCESS")
+      comment.info("SUCCESS")
       possibleClusterManager.foreach(_.shutdown())
   })
 
@@ -220,7 +220,7 @@ object CLI extends App with ManagerSupport {
    */
   def exit(status: Int)(implicit possibleClusterManager: Option[ClusterManager]): Unit = {
     possibleClusterManager.foreach(_.shutdown())
-    comment.warn(if (status == 0) "SUCCESS" else "FAILURE")
+    comment.info(if (status == 0) "SUCCESS" else "FAILURE")
     sys.exit(status)
   }
 
