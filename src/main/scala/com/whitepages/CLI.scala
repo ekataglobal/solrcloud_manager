@@ -1,5 +1,7 @@
 package com.whitepages
 
+import java.net.InetAddress
+
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.operation.{Operations, Operation}
 import com.whitepages.cloudmanager.action._
@@ -13,6 +15,7 @@ import org.apache.solr.common.cloud.ZkStateReader
 import scala.collection.JavaConverters._
 import org.slf4j.LoggerFactory
 import org.apache.log4j.Level
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.annotation.tailrec
 
@@ -36,6 +39,7 @@ object CLI extends App with ManagerSupport {
                         createNodeSet: Option[Seq[String]] = None,
                         asyncOps: Boolean = false,
                         alternateHost: String = "",
+                        timeout: Duration = Duration.Inf,
                         outputLevel: Level = Level.INFO
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
@@ -101,6 +105,11 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "copy") } text("Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
         opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983'")
+      )
+    cmd("waitactive") action { (_, c) =>
+      c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster") children(
+      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of the node that should be active. Default localhost."),
+      opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite.")
       )
     checkConfig{
       c =>
@@ -171,7 +180,7 @@ object CLI extends App with ManagerSupport {
               exit(1)
             }
 
-            val normalizedNodes = config.createNodeSet.map(_.map(startState.canonicalNodeName))
+            val normalizedNodes = config.createNodeSet.map(_.map(name => startState.canonicalNodeName(name)))
             Operation(Seq(CreateCollection(
               config.collection,
               config.numSlices,
@@ -189,6 +198,30 @@ object CLI extends App with ManagerSupport {
             }
 
             Operations.deployFromAnotherCluster(clusterManager, config.collection, config.alternateHost)
+          }
+          case "waitactive" => {
+            val nodeName =
+              if (config.node.isEmpty) java.net.InetAddress.getLocalHost.getHostName
+              else config.node
+            val waitNode = startState.canonicalNodeName(nodeName, allowOfflineReferences = true)
+
+            val startTime = System.nanoTime()
+            var fullyActive = false
+            do  {
+              val nodeReplicas = clusterManager.currentState.allReplicas.filter(_.node == waitNode)
+              val replicaCount = nodeReplicas.size
+              val activeReplicaCount = nodeReplicas.count(_.active)
+              comment.info(s"$activeReplicaCount of $replicaCount replicas are active")
+              if (replicaCount > activeReplicaCount) {
+                if ((System.nanoTime() - startTime).nanos > config.timeout) exit(1)
+                Thread.sleep(5000)
+              }
+              else
+                fullyActive = true
+
+            } while (!fullyActive)
+
+            Operation.empty
           }
         }
 
