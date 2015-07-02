@@ -16,6 +16,7 @@ import scala.collection.JavaConverters._
 import org.slf4j.LoggerFactory
 import org.apache.log4j.Level
 import scala.concurrent.duration._
+import scala.util.Try
 import scala.util.control.NonFatal
 import scala.annotation.tailrec
 
@@ -40,6 +41,7 @@ object CLI extends App with ManagerSupport {
                         asyncOps: Boolean = false,
                         alternateHost: String = "",
                         timeout: Duration = Duration.Inf,
+                        strict: Boolean = false,
                         outputLevel: Level = Level.INFO
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
@@ -108,8 +110,9 @@ object CLI extends App with ManagerSupport {
       )
     cmd("waitactive") action { (_, c) =>
       c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster") children(
-      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of the node that should be active. Default localhost."),
-      opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite.")
+      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of one or more (comma-delinated) nodes that should be active. Default localhost."),
+      opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite."),
+      opt[Unit]("strict") optional() action { (_, c) => { c.copy(strict = true) } } text("Whether to fail if any node names couldn't be found. Default false.")
       )
     checkConfig{
       c =>
@@ -200,15 +203,24 @@ object CLI extends App with ManagerSupport {
             Operations.deployFromAnotherCluster(clusterManager, config.collection, config.alternateHost)
           }
           case "waitactive" => {
-            val nodeName =
-              if (config.node.isEmpty) java.net.InetAddress.getLocalHost.getHostName
-              else config.node
-            val waitNode = startState.canonicalNodeName(nodeName, allowOfflineReferences = true)
+            val nodeNames: List[String] =
+              if (config.node.isEmpty) List(java.net.InetAddress.getLocalHost.getHostName)
+              else config.node.split(",").toList
+            val waitNodes = nodeNames.foldLeft(List.empty[String])( (acc, nodeName) => {
+              val canonicalName = Try(startState.canonicalNodeName(nodeName, allowOfflineReferences = true))
+              if (canonicalName.isSuccess)
+                canonicalName.get :: acc
+              else {
+                comment.warn("Could not determine node name from " + nodeName)
+                if (config.strict) exit(1)
+                acc
+              }
+            })
 
             val startTime = System.nanoTime()
             var fullyActive = false
             do  {
-              val nodeReplicas = clusterManager.currentState.allReplicas.filter(_.node == waitNode)
+              val nodeReplicas = clusterManager.currentState.allReplicas.filter(replica => waitNodes.contains(replica.node))
               val replicaCount = nodeReplicas.size
               val activeReplicaCount = nodeReplicas.count(_.active)
               comment.info(s"$activeReplicaCount of $replicaCount replicas are active")
