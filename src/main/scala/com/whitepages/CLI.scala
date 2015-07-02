@@ -43,9 +43,9 @@ object CLI extends App with ManagerSupport {
     opt[String]('z', "zk") required() action { (x, c) => { c.copy(zk = x) } } text("Zookeeper connection string, including any chroot path")
     opt[Unit]("confirm") optional() action { (_, c) =>
       c.copy(confirm = false) } text("Assume the operation is confirmed, don't prompt")
-    opt[Unit]("debug") optional() action { (_, c) =>
+    opt[Unit]('d', "debug") optional() action { (_, c) =>
       c.copy(outputLevel = Level.DEBUG) } text("debug output")
-    opt[Unit]("quiet") optional() action { (_, c) =>
+    opt[Unit]('q', "quiet") optional() action { (_, c) =>
       c.copy(outputLevel = Level.WARN) } text("less output")
     cmd("clusterstatus") action { (_, c) =>
       c.copy(mode = "clusterstatus") } text("Print current cluster status")
