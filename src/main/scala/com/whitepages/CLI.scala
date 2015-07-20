@@ -164,7 +164,7 @@ object CLI extends App with ManagerSupport {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))
           }
           case "deletereplica" => {
-            Operation(Seq(DeleteReplica(config.collection, config.slice, startState.canonicalNodeName(config.node), config.safetyFactor)))
+            Operation(Seq(DeleteReplica(config.collection, config.slice, startState.canonicalNodeName(config.node, allowOfflineReferences = true), config.safetyFactor)))
           }
           case "alias" => {
             val collections = config.collection.split(",")
