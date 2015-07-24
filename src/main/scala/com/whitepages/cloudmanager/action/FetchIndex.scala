@@ -2,8 +2,8 @@ package com.whitepages.cloudmanager.action
 
 import com.whitepages.cloudmanager.state.{LukeStateResponse, ReplicationStateResponse, ClusterManager}
 import org.apache.solr.common.params.ModifiableSolrParams
-import org.apache.solr.client.solrj.impl.HttpSolrServer
-import org.apache.solr.client.solrj.SolrServer
+import org.apache.solr.client.solrj.impl.{HttpSolrClient, HttpSolrServer}
+import org.apache.solr.client.solrj.{SolrClient, SolrServer}
 import scala.util.{Success, Failure}
 import scala.concurrent.duration._
 
@@ -32,8 +32,8 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
     val fromUrl = s"http://$fromNode$hostContext"
 
     // don't use a CloudSolrServer for this stuff, go to the node directly
-    val client = new HttpSolrServer(s"http://${targetReplica.host}")
-    val fromClient = new HttpSolrServer(fromUrl)
+    val client = new HttpSolrClient(s"http://${targetReplica.host}")
+    val fromClient = new HttpSolrClient(fromUrl)
 
     val params = new ModifiableSolrParams
     params.set("command", "fetchindex")
@@ -45,7 +45,7 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
       insureDataCopy(fromClient, client)
   }
 
-  private def insureDataCopy(fromClient: SolrServer, toClient: SolrServer): Boolean = {
+  private def insureDataCopy(fromClient: SolrClient, toClient: SolrClient): Boolean = {
     val detailsParams = new ModifiableSolrParams()
     detailsParams.set("show", "index")
     val fromResponse = SolrRequestHelpers.getSolrResponse(fromClient, detailsParams, s"/$fromCore/admin/luke")

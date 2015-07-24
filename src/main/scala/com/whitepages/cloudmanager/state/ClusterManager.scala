@@ -2,7 +2,7 @@ package com.whitepages.cloudmanager.state
 
 import org.apache.solr.common.cloud.{ZooKeeperException, ZkStateReader}
 import scala.collection.JavaConverters._
-import org.apache.solr.client.solrj.impl.CloudSolrServer
+import org.apache.solr.client.solrj.impl.{CloudSolrClient, CloudSolrServer}
 import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
 
 /**
@@ -10,8 +10,8 @@ import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
  *
  * @param client A preconstructed CloudSolrServer client. This client will be connect()'ed if it wasn't already.
  */
-case class ClusterManager(client: CloudSolrServer) extends ManagerSupport {
-  def this(zk: String) = this(new CloudSolrServer(zk))
+case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
+  def this(zk: String) = this(new CloudSolrClient(zk))
 
   try {
     client.connect()
@@ -38,7 +38,7 @@ case class ClusterManager(client: CloudSolrServer) extends ManagerSupport {
 
   def shutdown() = {
     stateReader.close()
-    client.shutdown()
+    client.close()
   }
 }
 

@@ -25,7 +25,6 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
   override def execute(clusterManager: ClusterManager): Boolean = {
     val replicaName = clusterManager.currentState.replicasFor(collection, slice).find(_.node == node).map(_.replicaName)
     if (replicaName.isDefined) {
-      comment.warn("WARNING: DeleteReplica does NOT remove the files from disk until 4.10. See SOLR-6072.")
       val params = new ModifiableSolrParams
       params.set("action", CollectionAction.DELETEREPLICA.toString)
       params.set("collection", collection)

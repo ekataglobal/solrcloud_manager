@@ -1,6 +1,6 @@
 package com.whitepages.cloudmanager.operation
 
-import org.apache.solr.client.solrj.impl.CloudSolrServer
+import org.apache.solr.client.solrj.impl.{CloudSolrClient, CloudSolrServer}
 import com.whitepages.cloudmanager.action.Action
 import com.whitepages.cloudmanager.state.ClusterManager
 import java.util.Calendar
@@ -18,7 +18,7 @@ case class Operation(actions: Seq[Action]) extends ManagerSupport {
     "Operation: \n" + actions.map("\t" + _.toString).mkString("\n")
   }
 
-  def execute(client: CloudSolrServer): Boolean = execute(ClusterManager(client))
+  def execute(client: CloudSolrClient): Boolean = execute(ClusterManager(client))
   def execute(clusterManager: ClusterManager): Boolean = {
     if (actions.isEmpty) {
       true

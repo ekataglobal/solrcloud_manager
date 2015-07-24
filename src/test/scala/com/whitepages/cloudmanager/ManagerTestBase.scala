@@ -1,12 +1,13 @@
 package com.whitepages.cloudmanager
 
+import org.apache.solr.BaseDistributedSearchTestCase.ShardsFixed
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase
 
 import org.junit.runner.RunWith
 import org.junit.Assert._
 import com.carrotsearch.randomizedtesting.RandomizedRunner
 import org.apache.solr.SolrTestCaseJ4
-import org.junit.After
+import org.junit.{Test, After}
 import org.apache.log4j.{Level, LogManager}
 import com.whitepages.cloudmanager.action.DeleteReplica
 import com.whitepages.cloudmanager.state.ClusterManager
@@ -20,8 +21,8 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope
 @ThreadLeakScope(Scope.NONE)  // disable the usual lucene test case leak checking
 abstract class ManagerTestBase extends AbstractFullDistribZkTestBase {
 
-  shardCount = 4  // four nodes
-  val nodeCount = shardCount            // alias a less confusing name (does NOT include the control node)
+  fixShardCount(4)  // four nodes
+  val nodeCount = getShardCount            // alias a less confusing name (does NOT include the control node)
   sliceCount = 1  // doesn't really matter, the base class chooses enough replicas to fill the shardcount, which isn't what we want here
   val oldCollectionName = "collection1" // I can't get to AbstractDistribZkTestBase.DEFAULT_COLLECTION, so copied here
 
@@ -63,7 +64,9 @@ abstract class ManagerTestBase extends AbstractFullDistribZkTestBase {
 
   def managerTest(): Unit
 
-  override def doTest(): Unit = {
+  @Test
+  @ShardsFixed(num = 4)
+  def doTest(): Unit = {
     val clusterManager = new ClusterManager(cloudClient)
 
     // wait for the cluster to stabilize

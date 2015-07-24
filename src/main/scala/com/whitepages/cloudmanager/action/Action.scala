@@ -1,6 +1,6 @@
 package com.whitepages.cloudmanager.action
 
-import org.apache.solr.client.solrj.impl.CloudSolrServer
+import org.apache.solr.client.solrj.impl.{CloudSolrClient, CloudSolrServer}
 import com.whitepages.cloudmanager.state._
 import org.apache.solr.client.solrj.request.QueryRequest
 import scala.util.{Random, Failure, Success, Try}
@@ -9,7 +9,7 @@ import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 import scala.concurrent.duration._
 import scala.annotation.tailrec
-import org.apache.solr.client.solrj.SolrServer
+import org.apache.solr.client.solrj.{SolrClient, SolrServer}
 import com.whitepages.cloudmanager.state.SolrState
 import com.whitepages.cloudmanager.state.GenericSolrResponse
 import scala.util.Failure
@@ -74,7 +74,7 @@ trait Action extends ManagerSupport {
 
     val asyncPause = 10 seconds
 
-    def getSolrResponse(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections") = {
+    def getSolrResponse(client: SolrClient, params: ModifiableSolrParams, path: String = "/admin/collections") = {
       val req = new QueryRequest(params)
       req.setPath(path)
       comment.debug(s"REQUEST: ${req.getPath} ${req.getParams}")
@@ -88,7 +88,7 @@ trait Action extends ManagerSupport {
       response
     }
 
-    def submitRequest(client: SolrServer, params: ModifiableSolrParams, path: String = "/admin/collections"): Boolean = {
+    def submitRequest(client: SolrClient, params: ModifiableSolrParams, path: String = "/admin/collections"): Boolean = {
       val response = getSolrResponse(client, params, path)
       response match {
         case Success(r) =>
@@ -107,7 +107,7 @@ trait Action extends ManagerSupport {
       !waitingStates.contains(rsp.walk("status", "state"))
     }
 
-    def submitAsyncRequest(client: CloudSolrServer, params: ModifiableSolrParams): Boolean = {
+    def submitAsyncRequest(client: CloudSolrClient, params: ModifiableSolrParams): Boolean = {
       val requestId = Random.nextInt(100000000).toString
       params.set("async", requestId)
       val response = getSolrResponse(client, params)
@@ -122,7 +122,7 @@ trait Action extends ManagerSupport {
     }
 
     @tailrec
-    def monitorAsyncRequest(client: CloudSolrServer, requestId: String): Boolean = {
+    def monitorAsyncRequest(client: CloudSolrClient, requestId: String): Boolean = {
       val checkParams = new ModifiableSolrParams
       checkParams.set("action", CollectionAction.REQUESTSTATUS.toString)
       checkParams.set("requestid", requestId)
@@ -171,7 +171,7 @@ trait Action extends ManagerSupport {
     }
 
     @tailrec
-    def waitForReplication(client: SolrServer, node: String):Boolean = {
+    def waitForReplication(client: SolrClient, node: String):Boolean = {
 
       val params = new ModifiableSolrParams
       params.set("command", "details")

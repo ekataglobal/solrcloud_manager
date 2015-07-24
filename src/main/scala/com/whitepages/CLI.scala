@@ -240,7 +240,7 @@ object CLI extends App with ManagerSupport {
         // get user confirmation, if necessary
         if (config.confirm && operation.nonEmpty) {
           comment.warn(operation.prettyPrint)
-          val input = readLine("Seem reasonable? [y]> ")
+          val input = scala.io.StdIn.readLine("Seem reasonable? [y]> ")
           if (input.toLowerCase.contains("n")) {
             comment.warn("Aborting.")
             exit(1)

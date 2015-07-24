@@ -133,7 +133,7 @@ class OperationsTest extends ManagerTestBase {
     assertTrue(Operations.cleanCluster(clusterManager, "testcollection").execute(cloudClient))
     assertEquals("only one node has the collection", 1, clusterManager.currentState.nodesWithCollection("testcollection").length)
 
-    controlJetty.start(true) // restore normalicy
+    controlJetty.start() // restore normalicy
   }
 
 

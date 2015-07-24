@@ -15,8 +15,8 @@ object SolrReplica {
 case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
   import SolrReplica._
   lazy val leader = slice.getLeader == replica
-  lazy val activeSlice = slice.getState == Slice.ACTIVE
-  lazy val activeReplica = replica.getStr(ZkStateReader.STATE_PROP) == ZkStateReader.ACTIVE
+  lazy val activeSlice = slice.getState == Slice.State.ACTIVE
+  lazy val activeReplica = replica.getState == Replica.State.ACTIVE  // TODO: This appears to be insufficient
   lazy val active = activeSlice && activeReplica
   lazy val core = replica.getStr(ZkStateReader.CORE_NAME_PROP)
   lazy val sliceName = slice.getName
