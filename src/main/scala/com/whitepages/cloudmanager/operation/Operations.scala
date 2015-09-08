@@ -54,7 +54,7 @@ object Operations extends ManagerSupport {
    * @param collection
    * @return The corresponding Operation
    */
-  def fillCluster(clusterManager: ClusterManager, collection: String): Operation = {
+  def fillCluster(clusterManager: ClusterManager, collection: String, nodesOpt: Option[Seq[String]] = None): Operation = {
     val state = clusterManager.currentState
 
     case class Assignment(node: String, slice: String)
@@ -79,8 +79,9 @@ object Operations extends ManagerSupport {
 
     // use the node with the most slices as a limiter for how many slices to allow per node
     val maxSlicesPerNode = participation.slicesPerNode.maxBy(_._2)._2
-    val currentSlots = currentReplicas.size
-    val availableSlots = maxSlicesPerNode * state.liveNodes.size - currentSlots
+    val currentSlots = nodesOpt.map(nodeList => currentReplicas.filter(replica => nodeList.contains(replica.node))).getOrElse(currentReplicas).size
+    val availableNodes = nodesOpt.map(nodeList => state.liveNodes & nodeList.toSet).getOrElse(state.liveNodes)
+    val availableSlots = maxSlicesPerNode * availableNodes.size - currentSlots
 
     @tailrec
     def assignSlot(actions: Seq[AddReplica], participation: Participation, availableSlots: Int): Seq[AddReplica] = {
@@ -90,7 +91,7 @@ object Operations extends ManagerSupport {
       else {
         // the slice with the fewest replicas
         val minSlice = participation.nodesPerSlice.minBy(_._2)._1
-        val nodesWithoutSlice = state.liveNodes -- participation.sliceParticipants(minSlice).map(_.node)
+        val nodesWithoutSlice = availableNodes -- participation.sliceParticipants(minSlice).map(_.node)
         // the node with the fewest replicas that doesn't have the slice with the fewest replicas
         val minNode = nodesWithoutSlice.minBy( participation.sliceCount )
 

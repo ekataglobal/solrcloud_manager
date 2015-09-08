@@ -37,7 +37,7 @@ object CLI extends App with ManagerSupport {
                         configName: String = "",
                         maxShardsPerNode: Option[Int] = None,
                         replicationFactor: Option[Int] = None,
-                        createNodeSet: Option[Seq[String]] = None,
+                        nodeSet: Option[Seq[String]] = None,
                         asyncOps: Boolean = false,
                         alternateHost: String = "",
                         timeout: Duration = Duration.Inf,
@@ -64,7 +64,8 @@ object CLI extends App with ManagerSupport {
       )
     cmd("fill") action { (_, c) =>
       c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out")
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
+        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. (Default all)")
       )
     cmd("addreplica") action { (_, c) =>
       c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
@@ -99,7 +100,7 @@ object CLI extends App with ManagerSupport {
         opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the config to use for this collection"),
         opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("When auto-assigning slices, don't allow more than this per node. Default 1"),
         opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("The desired number of replicas (1-based, default 1)"),
-        opt[String]("nodes") optional() action { (x, c) => { c.copy(createNodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)"),
+        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)"),
         opt[Unit]("async") optional() action { (_, c) =>
           c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts.")
       )
@@ -158,7 +159,8 @@ object CLI extends App with ManagerSupport {
             populationOperation ++ wipeOperation
           }
           case "fill" => {
-            Operations.fillCluster(clusterManager, config.collection)
+            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            Operations.fillCluster(clusterManager, config.collection, normalizedNodes)
           }
           case "addreplica" => {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))
@@ -183,7 +185,7 @@ object CLI extends App with ManagerSupport {
               exit(1)
             }
 
-            val normalizedNodes = config.createNodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
             Operation(Seq(CreateCollection(
               config.collection,
               config.numSlices,
