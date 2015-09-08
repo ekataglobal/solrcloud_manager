@@ -6,7 +6,7 @@ name := "solrcloud_manager"
 
 organization := "com.whitepages"
 
-version := "0.2.1"
+version := "1.0.0"
 
 scalaVersion := "2.11.4"
 
