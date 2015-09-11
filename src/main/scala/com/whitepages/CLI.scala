@@ -94,6 +94,10 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "deletealias") } text("Create an alias, or move the pointer if it already exists") children(
         opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the alias to delete")
       )
+    cmd("cleancollection") action { (_, c) =>
+      c.copy(mode = "cleancollection") } text("Remove any down/gone replicas from the clusterstate") children(
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to clean")
+      )
     cmd("deletecollection") action { (_, c) =>
       c.copy(mode = "deletecollection") } text("Deletes the specified collection") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to delete")
@@ -153,6 +157,9 @@ object CLI extends App with ManagerSupport {
               Operations.wipeNode(clusterManager, startState.canonicalNodeName(node), if (config.collection.isEmpty) None else Some(config.collection))
             }
             deletes.fold(Operation.empty)((a, b) => a ++ b)
+          }
+          case "cleancollection" => {
+            Operations.cleanCluster(clusterManager, config.collection)
           }
           case "populate" => {
             val nodesWithCollection = startState.nodesWithCollection(config.collection)
