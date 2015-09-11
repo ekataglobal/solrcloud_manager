@@ -55,6 +55,11 @@ object CLI extends App with ManagerSupport {
       c.copy(outputLevel = Level.WARN) } text("less output")
     cmd("clusterstatus") action { (_, c) =>
       c.copy(mode = "clusterstatus") } text("Print current cluster status")
+    cmd("clean") action { (_, c) =>
+      c.copy(mode = "clean") } text("Remove all replicas from given (comma-delinated) nodes") children(
+        opt[String]('c', "collection") optional() action { (x, c) => { c.copy(collection = x) } } text("Limit removals to this collection"),
+        opt[String]("nodes") required() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to remove replicas from")
+      )
     cmd("populate") action { (_, c) =>
       c.copy(mode = "populate") } text("populate a cluster from a given node, presumed to be an indexer") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to populate across the cluster"),
@@ -141,6 +146,13 @@ object CLI extends App with ManagerSupport {
             clusterManager.printAliases
             startState.printReplicas()
             Operation.empty
+          }
+          case "clean" => {
+            // TODO: The Option type (or lack thereof) of these config variables is being abused here.
+            val deletes = for (node <- config.nodeSet.get) yield {
+              Operations.wipeNode(clusterManager, startState.canonicalNodeName(node), if (config.collection.isEmpty) None else Some(config.collection))
+            }
+            deletes.fold(Operation.empty)((a, b) => a ++ b)
           }
           case "populate" => {
             val nodesWithCollection = startState.nodesWithCollection(config.collection)

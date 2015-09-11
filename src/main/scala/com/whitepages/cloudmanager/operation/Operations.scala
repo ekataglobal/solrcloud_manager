@@ -130,9 +130,10 @@ object Operations extends ManagerSupport {
    * @param node
    * @return The corresponding Operation
    */
-  def wipeNode(clusterManager: ClusterManager, node: String): Operation = {
+  def wipeNode(clusterManager: ClusterManager, node: String, collectionOpt: Option[String] = None): Operation = {
     val state = clusterManager.currentState
-    val replicasOnNode = state.allReplicas.filter(_.node == node)
+    val replicasOnNode = collectionOpt.map(collection => state.allReplicas.filter(_.collection == collection))
+      .getOrElse(state.allReplicas).filter(_.node == node)
     Operation(replicasOnNode.map( (replica) => DeleteReplica(replica.collection, replica.sliceName, replica.node)) )
   }
 
