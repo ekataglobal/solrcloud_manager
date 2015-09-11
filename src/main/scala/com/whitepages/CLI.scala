@@ -42,7 +42,8 @@ object CLI extends App with ManagerSupport {
                         alternateHost: String = "",
                         timeout: Duration = Duration.Inf,
                         strict: Boolean = false,
-                        outputLevel: Level = Level.INFO
+                        outputLevel: Level = Level.INFO,
+                        parallelReplication: Boolean = false
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
@@ -70,7 +71,8 @@ object CLI extends App with ManagerSupport {
     cmd("fill") action { (_, c) =>
       c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
-        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. (Default all)")
+        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. (Default all)"),
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelReplication = true) } } text("Create all replicas at once, instead of one-at-a-time.")
       )
     cmd("addreplica") action { (_, c) =>
       c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
@@ -156,7 +158,7 @@ object CLI extends App with ManagerSupport {
             val deletes = for (node <- config.nodeSet.get) yield {
               Operations.wipeNode(clusterManager, startState.canonicalNodeName(node), if (config.collection.isEmpty) None else Some(config.collection))
             }
-            deletes.fold(Operation.empty)((a, b) => a ++ b)
+            deletes.fold(Operation.empty)(_ ++ _)
           }
           case "cleancollection" => {
             Operations.cleanCluster(clusterManager, config.collection)
@@ -179,7 +181,7 @@ object CLI extends App with ManagerSupport {
           }
           case "fill" => {
             val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
-            Operations.fillCluster(clusterManager, config.collection, normalizedNodes)
+            Operations.fillCluster(clusterManager, config.collection, normalizedNodes, !config.parallelReplication)
           }
           case "addreplica" => {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))

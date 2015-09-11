@@ -54,7 +54,7 @@ object Operations extends ManagerSupport {
    * @param collection
    * @return The corresponding Operation
    */
-  def fillCluster(clusterManager: ClusterManager, collection: String, nodesOpt: Option[Seq[String]] = None): Operation = {
+  def fillCluster(clusterManager: ClusterManager, collection: String, nodesOpt: Option[Seq[String]] = None, waitForReplication: Boolean = true): Operation = {
     val state = clusterManager.currentState
 
     case class Assignment(node: String, slice: String)
@@ -96,7 +96,7 @@ object Operations extends ManagerSupport {
         val minNode = nodesWithoutSlice.minBy( participation.sliceCount )
 
         assignSlot(
-          actions :+ AddReplica(collection, minSlice, minNode),
+          actions :+ AddReplica(collection, minSlice, minNode, waitForReplication),
           participation + Assignment(minNode, minSlice),
           availableSlots - 1)
       }
