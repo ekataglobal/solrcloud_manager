@@ -1,8 +1,10 @@
 package com.whitepages.cloudmanager.state
 
-import org.apache.solr.common.cloud.{ZooKeeperException, ZkStateReader}
+import org.apache.solr.common.cloud.{ZooKeeperException}
+import org.apache.zookeeper.KeeperException
+import org.apache.zookeeper.data.Stat
 import scala.collection.JavaConverters._
-import org.apache.solr.client.solrj.impl.{CloudSolrClient, CloudSolrServer}
+import org.apache.solr.client.solrj.impl.{CloudSolrClient}
 import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
 
 /**
@@ -34,6 +36,23 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
       comment.info("Aliases:")
       aliasMap.foreach { case (alias, collection) => comment.info(s"$alias\t->\t$collection")}
     }
+  }
+
+  def overseer(): String = {
+    val zkClient = stateReader.getZkClient
+    var data: Array[Byte] = null
+    try {
+      val payload = new String(zkClient.getData("/overseer_elect/leader", null, new Stat(), true))
+      payload.replaceFirst(""".*"id":"[^-]*-""", "").replaceAll("""-.*""", "")
+    }
+    catch {
+      case e: KeeperException.NoNodeException => {
+        "none"
+      }
+    }
+  }
+  def printOverseer() {
+    comment.info(s"Overseer: ${SolrReplica.hostName(overseer())}")
   }
 
   def shutdown() = {
