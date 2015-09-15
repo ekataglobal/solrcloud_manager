@@ -31,6 +31,7 @@ object CLI extends App with ManagerSupport {
                         confirm: Boolean = true,
                         slice: String = "",
                         node: String = "",
+                        node2: String = "",
                         safetyFactor: Int = 1,
                         alias: String = "",
                         numSlices: Int = 0,
@@ -61,6 +62,17 @@ object CLI extends App with ManagerSupport {
         opt[String]('c', "collection") optional() action { (x, c) => { c.copy(collection = x) } } text("Limit removals to this collection"),
         opt[String]("nodes") required() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to remove replicas from"),
         opt[Int]("safetyFactor") optional() action { (x, c) => { c.copy(safetyFactor = x) } } text("Fail any delete that would result in fewer total replicas than this. Default 1.")
+      )
+    cmd("clone") action { (_, c) =>
+      c.copy(mode = "clone") } text("Adds all replicas on a given node to another node") children(
+        opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
+        opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto"),
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelReplication = true) } } text("Create all replicas at once, instead of one-at-a-time.")
+      )
+    cmd("migratenode") action { (_, c) =>
+      c.copy(mode = "migrate") } text("Adds all replicas on a given node to another node") children(
+        opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
+        opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto")
       )
     cmd("populate") action { (_, c) =>
       c.copy(mode = "populate") } text("populate a cluster from a given node, presumed to be an indexer") children(
@@ -98,7 +110,7 @@ object CLI extends App with ManagerSupport {
         opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the alias to delete")
       )
     cmd("cleancollection") action { (_, c) =>
-      c.copy(mode = "cleancollection") } text("Remove any down/gone replicas from the clusterstate") children(
+      c.copy(mode = "cleancollection") } text("Remove any non-active replicas from the clusterstate") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to clean")
       )
     cmd("deletecollection") action { (_, c) =>
@@ -166,6 +178,22 @@ object CLI extends App with ManagerSupport {
               )
             }
             deletes.fold(Operation.empty)(_ ++ _)
+          }
+          case "clone" => {
+            Operations.cloneReplicas(
+              clusterManager,
+              startState.canonicalNodeName(config.node, true),
+              startState.canonicalNodeName(config.node2),
+              !config.parallelReplication
+            )
+          }
+          case "migrate" => {
+            Operations.cloneReplicas(
+              clusterManager,
+              startState.canonicalNodeName(config.node, true),
+              startState.canonicalNodeName(config.node2)
+            ) ++
+            Operations.wipeNode(clusterManager, config.node)
           }
           case "cleancollection" => {
             Operations.cleanCluster(clusterManager, config.collection)

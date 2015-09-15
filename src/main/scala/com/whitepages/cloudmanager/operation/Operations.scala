@@ -106,6 +106,22 @@ object Operations extends ManagerSupport {
   }
 
   /**
+   * Finds all replicas on a given node, and creates the same set of replicas on another given node.
+   * The original node is left untouched, but would be an easy target for a "cleanCluster()" if the
+   * intention is a migration.
+   * @param clusterManager
+   * @param from Node name to gather the replica list from
+   * @param onto Node name to add the replicas to
+   * @param waitForReplication
+   * @return
+   */
+  def cloneReplicas(clusterManager: ClusterManager, from: String, onto: String, waitForReplication: Boolean = true) = {
+    val state = clusterManager.currentState
+    val replicasToClone = state.allReplicas.filter(_.node == from)
+    Operation(replicasToClone.map(replica => AddReplica(replica.collection, replica.sliceName, onto, waitForReplication)))
+  }
+
+  /**
    * Removes any inactive replicas for a given collection.
    * A replica could be "inactive" because it's in a bad state, because the hosting node is down, or because the relevant slice
    * A node need not be up for the replica to be removed.
