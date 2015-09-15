@@ -75,7 +75,7 @@ object CLI extends App with ManagerSupport {
         opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto")
       )
     cmd("populate") action { (_, c) =>
-      c.copy(mode = "populate") } text("populate a cluster from a given node, presumed to be an indexer") children(
+      c.copy(mode = "populate") } text("(EXPERIMENTAL) populate a cluster from a given node, presumed to be an indexer") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to populate across the cluster"),
         opt[Int]("slicesPerNode") required() action { (x, c) => { c.copy(slicesPerNode = x) } } text("The desired number of slices on each node"),
         opt[Unit]("wipe") optional() action { (_, c) =>
@@ -129,7 +129,7 @@ object CLI extends App with ManagerSupport {
           c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts.")
       )
     cmd("copy") action { (_, c) =>
-      c.copy(mode = "copy") } text("Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
+      c.copy(mode = "copy") } text("(EXPERIMENTAL) Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
         opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983'")
       )
