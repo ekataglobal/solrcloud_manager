@@ -188,12 +188,10 @@ object CLI extends App with ManagerSupport {
             )
           }
           case "migrate" => {
-            Operations.cloneReplicas(
-              clusterManager,
-              startState.canonicalNodeName(config.node, true),
-              startState.canonicalNodeName(config.node2)
-            ) ++
-            Operations.wipeNode(clusterManager, config.node)
+            val from = startState.canonicalNodeName(config.node, true)
+            val onto = startState.canonicalNodeName(config.node2)
+
+            Operations.cloneReplicas(clusterManager, from, onto) ++ Operations.wipeNode(clusterManager, from)
           }
           case "cleancollection" => {
             Operations.cleanCluster(clusterManager, config.collection)

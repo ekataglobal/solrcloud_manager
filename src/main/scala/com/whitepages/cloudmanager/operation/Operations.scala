@@ -125,7 +125,7 @@ object Operations extends ManagerSupport {
    * Removes any inactive replicas for a given collection.
    * A replica could be "inactive" because it's in a bad state, because the hosting node is down, or because the relevant slice
    * A node need not be up for the replica to be removed.
-   * Note that SOLR-6072 means any files on the relevent node are NOT deleted.
+   * Note that SOLR-6072 means any files on the relevent node are NOT deleted on solr < 4.10.
    * @param clusterManager
    * @param collection
    * @return The corresponding Operation
@@ -150,6 +150,7 @@ object Operations extends ManagerSupport {
     val state = clusterManager.currentState
     val replicasOnNode = collectionOpt.map(collection => state.allReplicas.filter(_.collection == collection))
       .getOrElse(state.allReplicas).filter(_.node == node)
+
     Operation(replicasOnNode.map( (replica) => DeleteReplica(replica.collection, replica.sliceName, replica.node, safetyFactor)) )
   }
 
