@@ -4,13 +4,15 @@ SolrCloud Manager
 
 Provides easy SolrCloud cluster management.
  
-Command-line syntax, with extra protection against doing Bad Things. Some example Bad Things this helps with:
+Command-line syntax, layers two major features on the Solr Collections API:
 
-* deleting the last replica for a given slice
-* creating a collection that doesn't reference a known config in ZK
-* deleting a collection out from under an alias
-
-Also provides some advanced cluster-manipulation actions, see the relevant section below.
+1. An abundance of caution. Some example Bad Things this helps prevent:
+    * Deleting the last replica for a given slice
+    * Creating a collection that doesn't reference a known config in ZK
+    * Deleting a collection with a current alias
+2. Ease of use:
+    * Support for common cluster-manipulation actions, see the "Cluster Commands" section below.
+    * Display and refer to nodes by DNS names, instead of IP addresses. 
 
 Prerequisites:
 ==============
@@ -22,6 +24,8 @@ Assumes Solr >= 4.8. Specifically, the ADDREPLICA collections API command was ad
 may work if you don't need to add replicas, but this is untested.
 
 Requires Scala & SBT. Installing sbt-extras will handle getting and managing these for you: https://github.com/paulp/sbt-extras
+
+If your servlet isn't bound to /solr, give it a try anyway, but there may be bugs.
 
 Basic commandline usage:
 =======================
@@ -38,13 +42,18 @@ Some examples:
     
     # create a collection
     sbt "run createcollection -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf"
+
     # add a replica
     sbt "run addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com:8980_solr"
     
     # Use any fresh nodes in the cluster to increase your replication factor
     sbt "run fill -z zk0.example.com:2181/myapp -c collection1"
+    
     # Remove any replicas not marked "active"
-    sbt "run clean -z zk0.example.com:2181/myapp -c collection1"
+    sbt "run cleancollection -z zk0.example.com:2181/myapp -c collection1"
+    
+    # Move all replicas for all collections from one node to another 
+    sbt "run migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com"
     
 If you don't want to run in SBT, or want a way to deploy the tool, "sbt assembly" should produce a stand-alone fat jar, 
 which you can run with a simple java command.
@@ -68,22 +77,15 @@ Additionally, "node" here refers to a physical host machine running solr. A node
 
     <IP address>:<port>_solr
 
-Solr always uses the IP address in a node specification, but this tool will do hostname translation if you specify that.
-If your servlet isn't bound to /solr, give it a try anyway, but there may be bugs.
+Solr always uses the IP address in a node specification, but this tool will do hostname translation
+if possible.
 
 
 Cluster commands:
 -----------------
 
-**populate**:
-Support for a bulk-deployment strategy for a collection. 
-
-Add a new node to your cluster, create your new 
-collection ONLY on that node, and index your data onto it. 
- 
-This gets you an index without impacting current nodes. 
-"populate" at this point will replicate the slices on that single node across the rest of your cluster, and 
-optionally clean up by wiping the shards from the index node so you can cleanly remove it from the cluster again.
+A lot of the work in large Solrcloud cluster management isn't so much figuring out the right API command, 
+as figuring out the correct **set** of API commands. The following common cluster operations are provided:
 
 **fill**:
 Adds replicas to nodes not currently/fully participating in a given collection, starting with the slices with the
@@ -95,12 +97,24 @@ evenly divisible.
 
 Note that "participation" for a node is determined by slice count for the _given_ collection, not slice 
 count across _all_ collections. 
+
+**migratenode**
+Moves all replicas from one node to another. (So, Copy/Delete)
+
+**clean**
+Removes all replicas from a given node.
     
-**clean**:
+**cleancollection**:
 Removes any replicas in a given collection that are not currently marked "active". A node doesn't have to be
-up for its replicas to be removed.
+up for its replicas to be removed. 
+WARNING: Replicas in the "recovering" state are not currently considered active.
     
-**copy**:
+**waitactive**:
+This command returns when all replicas for the given node are active. No cluster changes are made. 
+Useful as a mechanism for delaying other actions. For example, preventing a rolling restart from overstepping
+your replication factor.
+    
+**copy**: (Experimental)
 Provides a method of doing **cross cluster** bulk data deployment. Several caveats:
     
 1. The collection MUST exist in both clusters.
@@ -109,6 +123,16 @@ no check for this!
 1. The collection you're copying into should be empty - if it isn't, solr may silently decide a slice is
 newer than the data you're trying to copy, and fail to do so.
 1. Don't forget to hard-commit on the cluster you're copying from before you start
+
+**populate**: (Experimental)
+Support for a bulk-deployment strategy for a collection. 
+
+Add a new node to your cluster, create your new 
+collection ONLY on that node, and index your data onto it. 
+ 
+This gets you an index without impacting current nodes. 
+"populate" at this point will replicate the slices on that single node across the rest of your cluster, and 
+optionally clean up by wiping the shards from the index node so you can cleanly remove it from the cluster again.
 
     
 TODO:
