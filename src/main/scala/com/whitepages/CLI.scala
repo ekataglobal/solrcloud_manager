@@ -70,7 +70,7 @@ object CLI extends App with ManagerSupport {
         opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelReplication = true) } } text("Create all replicas at once, instead of one-at-a-time.")
       )
     cmd("migratenode") action { (_, c) =>
-      c.copy(mode = "migrate") } text("Adds all replicas on a given node to another node") children(
+      c.copy(mode = "migrate") } text("Adds all replicas on a given node to another node, then removes those replicas from the original node") children(
         opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
         opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto")
       )
