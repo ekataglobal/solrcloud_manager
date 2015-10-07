@@ -12,11 +12,11 @@ object SolrReplica {
     InetAddress.getByName(chunks.head).getCanonicalHostName + ":" + chunks.tail.mkString("").replace('_','/')
   }
 }
-case class SolrReplica(collection: String, slice: Slice, replica: Replica) {
+case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive: Boolean) {
   import SolrReplica._
   lazy val leader = slice.getLeader == replica
   lazy val activeSlice = slice.getState == Slice.State.ACTIVE
-  lazy val activeReplica = replica.getState == Replica.State.ACTIVE  // TODO: This appears to be insufficient
+  lazy val activeReplica = replica.getState == Replica.State.ACTIVE && alive
   lazy val active = activeSlice && activeReplica
   lazy val core = replica.getStr(ZkStateReader.CORE_NAME_PROP)
   lazy val sliceName = slice.getName
@@ -71,7 +71,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
     collection <- collections
     (sliceName, slice) <- extractSlicesMap(collection).toSeq.sortBy(_._1)
     (replicaName, node) <- extractReplicasMap(collection, sliceName).toSeq.sortBy(_._1)
-  } yield SolrReplica(collection, slice, node)
+  } yield SolrReplica(collection, slice, node, liveNodes.contains(node.getNodeName))
 
   lazy val liveNodes = state.getLiveNodes.asScala
   lazy val downNodes =  allReplicas.map(_.node).filterNot(liveNodes.contains)
