@@ -19,7 +19,7 @@ import com.whitepages.cloudmanager.state.ReplicationStateResponse
 import scala.util.Success
 import com.whitepages.cloudmanager.ManagerSupport
 
-case class StateCondition(name: String, check: (SolrState) => Boolean)
+case class StateCondition(name: String, check: Conditions.Condition)
 
 trait Action extends ManagerSupport {
   

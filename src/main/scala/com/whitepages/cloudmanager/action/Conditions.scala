@@ -6,19 +6,23 @@ import com.whitepages.cloudmanager.ManagerSupport
 import scala.concurrent.duration._
 
 object Conditions extends ManagerSupport {
-  def collectionExists(collection: String) = (state: SolrState) => state.collections.contains(collection)
-  def activeCollection(collection: String) = (state: SolrState) => state.replicasFor(collection).forall(_.active)
-  def liveReplicaCount(collection: String, slice: String) = (state: SolrState) => state.replicasFor(collection, slice).count(_.active)
-  def nodeExists(node: String) = (state: SolrState) => state.liveNodes.contains(node)
-  def replicaExists(collection: String, slice: String, replica: String) = (state: SolrState) => state.replicasFor(collection, slice).find(_.replicaName == replica).nonEmpty
-  def coreNameExists(name: String) = (state: SolrState) => state.allReplicas.map(_.core).contains(name)
-  def sliceIncludesNode(collection: String, slice: String, node: String) =
-    (state: SolrState) => state.replicasFor(collection, slice).filter(_.node == node).nonEmpty
-  def activeSliceOnNode(collection: String, slice: String, node: String) =
+  type Condition = (SolrState) => Boolean
+
+  def collectionExists(collection: String): Condition = (state: SolrState) => state.collections.contains(collection)
+  def activeCollection(collection: String): Condition = (state: SolrState) => state.replicasFor(collection).forall(_.active)
+  def nodeExists(node: String): Condition = (state: SolrState) => state.liveNodes.contains(node)
+  def replicaExists(collection: String, slice: String, replica: String): Condition =
+    (state: SolrState) => state.replicasFor(collection, slice).exists(_.replicaName == replica)
+  def coreNameExists(name: String): Condition = (state: SolrState) => state.allReplicas.map(_.core).contains(name)
+  def sliceIncludesNode(collection: String, slice: String, node: String): Condition =
+    (state: SolrState) => state.replicasFor(collection, slice).exists(_.node == node)
+  def activeSliceOnNode(collection: String, slice: String, node: String): Condition =
     (state: SolrState) => state.replicasFor(collection, slice).find(_.node == node) match {
       case Some(replica) => replica.active
       case None => false
     }
+
+  def liveReplicaCount(collection: String, slice: String) = (state: SolrState) => state.replicasFor(collection, slice).count(_.active)
 
   /**
    * Doesn't return until the condition is satisfied, or the timeout is reached
@@ -28,7 +32,7 @@ object Conditions extends ManagerSupport {
    * @return
    */
   @tailrec
-  def waitForState(stateFactory: ClusterManager, condition: (SolrState) => Boolean, timeoutSec: Int = 300): Boolean = {
+  def waitForState(stateFactory: ClusterManager, condition: Condition, timeoutSec: Int = 300): Boolean = {
     condition(stateFactory.currentState) match {
       case true => true
       case false if timeoutSec == 0 => false
