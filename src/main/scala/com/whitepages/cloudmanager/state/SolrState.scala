@@ -14,7 +14,7 @@ object SolrReplica {
 }
 case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive: Boolean) {
   import SolrReplica._
-  lazy val leader = slice.getLeader == replica
+  lazy val leader = slice.getLeader.toString == replica.toString // TODO: Why aren't these the same object in some collections?
   lazy val activeSlice = slice.getState == Slice.State.ACTIVE
   lazy val activeReplica = replica.getState == Replica.State.ACTIVE && alive
   lazy val active = activeSlice && activeReplica
