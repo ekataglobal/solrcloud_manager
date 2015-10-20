@@ -17,51 +17,48 @@ Command-line syntax, layers two major features on the Solr Collections API:
 Prerequisites:
 ==============
 
-Assumes you're handling ALL collection configuration data in ZooKeeper. (I use -Dsolr.solrxml.location=zookeeper too, 
-although that probably isn't required)
+Assumes you're handling ALL collection configuration data in ZooKeeper.
 
-Assumes Solr >= 4.8. Specifically, the ADDREPLICA collections API command was added in 4.8. Earlier cluster versions
+Solr >= 4.8. Specifically, the ADDREPLICA collections API command was added in 4.8. Earlier cluster versions
 may work if you don't need to add replicas, but this is untested.
-
-Requires Scala & SBT. Installing sbt-extras will handle getting and managing these for you: https://github.com/paulp/sbt-extras
 
 If your servlet isn't bound to /solr, give it a try anyway, but there may be bugs.
 
-Basic commandline usage:
+Installing:
+===========
+
+Download the assembly jar from one of the github releases, and run using java, like:
+
+    java -jar solrcloud_manager-assembly-1.2.0.jar --help
+    
+
+Basic usage:
 =======================
 
 Simple commands simply mirror their collections API counterpart, while making sure that the command could (and did) succeed. 
     
     # Show usage: 
-    sbt "run --help"
+    java -jar solrcloud_manager-assembly-1.2.0.jar --help
 
 Some examples:
 
     # Show cluster state:
-    sbt "run -z zk0.example.com:2181/myapp"
+    java -jar solrcloud_manager-assembly-1.2.0.jar -z zk0.example.com:2181/myapp
     
     # create a collection
-    sbt "run createcollection -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf"
+    java -jar solrcloud_manager-assembly-1.2.0.jar -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf
 
     # add a replica
-    sbt "run addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com:8980_solr"
+    java -jar solrcloud_manager-assembly-1.2.0.jar addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com
     
-    # Use any fresh nodes in the cluster to increase your replication factor
-    sbt "run fill -z zk0.example.com:2181/myapp -c collection1"
+    # Use any unused/underused nodes in the cluster to increase your replication factor
+    java -jar solrcloud_manager-assembly-1.2.0.jar fill -z zk0.example.com:2181/myapp -c collection1
     
     # Remove any replicas not marked "active"
-    sbt "run cleancollection -z zk0.example.com:2181/myapp -c collection1"
+    java -jar solrcloud_manager-assembly-1.2.0.jar cleancollection -z zk0.example.com:2181/myapp -c collection1
     
     # Move all replicas for all collections from one node to another 
-    sbt "run migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com"
-    
-If you don't want to run in SBT, or want a way to deploy the tool, "sbt assembly" should produce a stand-alone fat jar, 
-which you can run with a simple java command.
-
-    # build the assembly jar
-    sbt assembly
-    # Show the cluster state
-    java -jar target/scala-2.11/solrcloud_manager-assembly-1.1.0.jar -z zk0.example.com:2181/myapp
+    java -jar solrcloud_manager-assembly-1.2.0.jar migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com
 
 
 Terminology:
@@ -83,14 +80,15 @@ Additionally, "node" here refers to a physical host machine running solr. A node
     <IP address>:<port>_solr
 
 Solr always uses the IP address in a node specification, but this tool will do hostname translation
-if possible.
+if possible, and will select nodes from incomplete specifications if a distinct identifier can be found.
 
 
 Cluster commands:
 -----------------
 
 A lot of the work in large Solrcloud cluster management isn't so much figuring out the right API command, 
-as figuring out the correct **set** of API commands. The following common cluster operations are provided:
+as figuring out the correct **set** of API commands. See the help output for a complete list, but the following 
+common cluster operations are supported:
 
 **fill**:
 Adds replicas to nodes not currently/fully participating in a given collection, starting with the slices with the
@@ -118,6 +116,12 @@ WARNING: Replicas in the "recovering" state are not currently considered active.
 This command returns when all replicas for the given node are active. No cluster changes are made. 
 Useful as a mechanism for delaying other actions. For example, preventing a rolling restart from overstepping
 your replication factor.
+
+**backup**:
+For a given collection, save a copy of your index data onto the local disk of the nodes. This can protect you
+from user error like accidental deletion, but if you want to protect against hardware failure you'll still need
+a way to ship the backup copy off of the nodes somehow. Giving all your nodes a shared remote 
+filesystem (ie, NFS) and specifying that as the backup directory would work.
     
 **copy**: (Experimental)
 Provides a method of doing **cross cluster** bulk data deployment. Several caveats:
@@ -143,19 +147,17 @@ optionally clean up by wiping the shards from the index node so you can cleanly 
 TODO:
 =====
 
+* Pretty-print operation output
 * More consistent exception responses and handling (Use ManagerException more)
 * Solr version detection and failover to older APIs if possible
 * Better introspection of solr responses
 * Insure paths other than /solr work
-* Pretty-print operation output
 
-Issues:
+SolrCloud Issues:
 =======
 
 As of Solr 4.9, The collections API currently has several issues. 
-This tool protects you from some of them, marked (w)
-
-Collections API Issues:
+This tool can work around some of them, marked (w).
 
 1. SOLR-6072 - DELETEREPLICA can't delete the files from disk (Fixed in Solr 4.10)
 1. (w) SOLR-5638 - If you try to CREATECOLLECTION with a configName that doesn't exist, it creates the cores before noticing that
@@ -175,13 +177,31 @@ changed after CREATECOLLECTION. As a result, this tool ignores maxShardsPerNode 
     command, but not at collection creation time)
 1. Running a Collection API command using the "async" feature hides the actual error message, if there was one
 
-IntelliJ Issues:
+Development:
+============
+
+Requires Scala & SBT. Installing sbt-extras will handle getting and managing these for you: https://github.com/paulp/sbt-extras
+
+IntelliJ Issues
+---------------
 
 In IntelliJ's SBT import, the artifact inclusion order defined in build.sbt isn't respected properly. 
 After importing the project,
 Go to File->Project Structure->Modules and make sure the "test-framework" jars appear before the "core" jars.
 
-Running in SBT:
+Running in SBT
+--------------
 
 If running in sbt, you may get an exception message "sbt.TrapExitSecurityException thrown from the UncaughtExceptionHandler in thread"
 at the end of execution. This is due to the code using System.exit in the SBT context, and can be ignored.
+
+Testing
+-------
+
+This runs the test suite:
+
+    sbt test
+    
+The test suite is built on top of the JUnit framework provided by Solr itself. 
+Unfortunately, this is very spammy output, and the bridge between JUnit and sbt causes some strangeness, 
+including odd test count output.
