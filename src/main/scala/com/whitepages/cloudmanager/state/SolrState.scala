@@ -21,7 +21,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive
   lazy val core = replica.getStr(ZkStateReader.CORE_NAME_PROP)
   lazy val sliceName = slice.getName
   lazy val replicaName = replica.getName
-  lazy val url = replica.get("base_url")
+  lazy val url = replica.getStr(ZkStateReader.BASE_URL_PROP)
   lazy val node = replica.getNodeName
   lazy val host = hostName(node)
 }
@@ -83,6 +83,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
   def replicasFor(collection: String): Seq[SolrReplica] = allReplicas.filter(_.collection == collection)
   def replicasFor(collection: String, sliceName: String): Seq[SolrReplica] =
     replicasFor(collection).filter(_.slice.getName == sliceName)
+  def liveReplicasFor(collection: String): Seq[SolrReplica] = replicasFor(collection).filter(_.active)
   def nodesWithCollection(collection: String) = replicasFor(collection).map(_.node).distinct
   def nodesWithoutCollection(collection: String) = liveNodes -- nodesWithCollection(collection)
 

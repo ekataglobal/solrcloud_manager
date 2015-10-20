@@ -1,5 +1,7 @@
 package com.whitepages.cloudmanager.action
 
+import java.util.Date
+
 import org.apache.solr.client.solrj.impl.{CloudSolrClient, CloudSolrServer}
 import com.whitepages.cloudmanager.state._
 import org.apache.solr.client.solrj.request.QueryRequest
@@ -152,6 +154,15 @@ trait Action extends ManagerSupport {
   }
 
   object ReplicationHelpers {
+
+    private val detailsReq = new ModifiableSolrParams
+    detailsReq.set("command", "details")
+
+    private def getReplicationDetails(client: SolrClient, core: String): Try[ReplicationStateResponse] = {
+      val checkResponse = SolrRequestHelpers.getSolrResponse(client, detailsReq, s"/$core/replication")
+      checkResponse.map(r => ReplicationStateResponse(r.rsp))
+    }
+
     def checkFetchIndexResponse(rsp: SolrResponseHelper): Boolean = {
       rsp.status == "0" && rsp.walk("status") == Some("OK")
     }
@@ -171,16 +182,12 @@ trait Action extends ManagerSupport {
     }
 
     @tailrec
-    def waitForReplication(client: SolrClient, node: String):Boolean = {
+    def waitForReplication(client: SolrClient, core: String):Boolean = {
 
-      val params = new ModifiableSolrParams
-      params.set("command", "details")
-
-      val checkResponse = SolrRequestHelpers.getSolrResponse(client, params, s"/$node/replication")
+      val checkResponse = getReplicationDetails(client, core)
       checkResponse match {
         case Success(r) if checkReplicationStatusResponse(r) => {
-          val rsp = ReplicationStateResponse(r.rsp)
-          val remaining = checkRemainingReplicationTime(rsp).seconds
+          val remaining = checkRemainingReplicationTime(r).seconds
           if (remaining == 0.seconds) {
             true
           }
@@ -188,7 +195,34 @@ trait Action extends ManagerSupport {
             comment.info(s"Waiting for replication, expected duration: ${remaining.toSeconds} seconds")
             val delayMillis = if (remaining > 600.seconds) 300.seconds.toMillis else remaining.toMillis / 2
             delay(Math.max(delayMillis, 1000))
-            waitForReplication(client, node)
+            waitForReplication(client, core)
+          }
+        }
+        case Success(r) if !checkReplicationStatusResponse(r) => {
+          comment.warn(s"Unexpected response checking replication status: $r")
+          false
+        }
+        case Failure(e) => {
+          comment.warn(s"Error checking replication status, $e")
+          false
+        }
+      }
+
+    }
+    
+    @tailrec
+    def waitForBackup(client: SolrClient, core: String, since: Date): Boolean = {
+      val checkResponse = getReplicationDetails(client, core)
+      checkResponse match {
+        case Success(r) if checkReplicationStatusResponse(r) => {
+          (r.lastBackup, r.lastBackupSucceeded) match {
+            case (Some(when), Some(succeeded)) if when.after(since) =>
+              // the last backup date doesn't get updated until the backup finishes
+              succeeded
+            case _ =>
+              comment.info(s"Waiting for backup request of $core to complete")
+              delay(5.seconds)
+              waitForBackup(client, core, since)
           }
         }
         case Success(r) if !checkReplicationStatusResponse(r) => {

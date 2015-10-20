@@ -17,10 +17,7 @@ object Conditions extends ManagerSupport {
   def sliceIncludesNode(collection: String, slice: String, node: String): Condition =
     (state: SolrState) => state.replicasFor(collection, slice).exists(_.node == node)
   def activeSliceOnNode(collection: String, slice: String, node: String): Condition =
-    (state: SolrState) => state.replicasFor(collection, slice).find(_.node == node) match {
-      case Some(replica) => replica.active
-      case None => false
-    }
+    (state: SolrState) => state.replicasFor(collection, slice).find(_.node == node).exists(_.active)
 
   def liveReplicaCount(collection: String, slice: String) = (state: SolrState) => state.replicasFor(collection, slice).count(_.active)
 

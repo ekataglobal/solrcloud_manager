@@ -44,7 +44,10 @@ object CLI extends App with ManagerSupport {
                         timeout: Duration = Duration.Inf,
                         strict: Boolean = false,
                         outputLevel: Level = Level.INFO,
-                        parallelReplication: Boolean = false
+                        parallelOps: Boolean = false,
+                        backupLimit: Int = 2,
+                        backupDir: String = "",
+                        backupLeaders: Boolean = true
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
@@ -67,7 +70,7 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "clone") } text("Adds all replicas on a given node to another node") children(
         opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
         opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto"),
-        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelReplication = true) } } text("Create all replicas at once, instead of one-at-a-time.")
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas at once, instead of one-at-a-time.")
       )
     cmd("migratenode") action { (_, c) =>
       c.copy(mode = "migrate") } text("Adds all replicas on a given node to another node, then removes those replicas from the original node") children(
@@ -85,7 +88,7 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
         opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. (Default all)"),
-        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelReplication = true) } } text("Create all replicas at once, instead of one-at-a-time.")
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas at once, instead of one-at-a-time.")
       )
     cmd("addreplica") action { (_, c) =>
       c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
@@ -139,6 +142,14 @@ object CLI extends App with ManagerSupport {
       opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite."),
       opt[Unit]("strict") optional() action { (_, c) => { c.copy(strict = true) } } text("Whether to fail if any node names couldn't be found. Default false.")
       )
+    cmd("backup") action { (_, c) =>
+      c.copy(mode = "backup") } text("Triggers a backup request for a given collection") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to back up"),
+      opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on each node to put the backup in. The core name will be appended if any nodes have more than one core."),
+      opt[Int]("keep") optional() action { (x, c) => { c.copy(backupLimit = x) } } text("The number of backups for a given node/core to keep. Default 2."),
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica backup succeeds"),
+      opt[Unit]("all") optional() action { (x, c) => { c.copy(backupLeaders = false) } } text("Back up all replicas, not just leaders")
+      )
     checkConfig{
       c =>
         if (c.zk.isEmpty) failure("provide a zookeeper connection string, with port and (optional) chroot")
@@ -184,7 +195,7 @@ object CLI extends App with ManagerSupport {
               clusterManager,
               startState.canonicalNodeName(config.node, true),
               startState.canonicalNodeName(config.node2),
-              !config.parallelReplication
+              !config.parallelOps
             )
           }
           case "migrate" => {
@@ -214,7 +225,7 @@ object CLI extends App with ManagerSupport {
           }
           case "fill" => {
             val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
-            Operations.fillCluster(clusterManager, config.collection, normalizedNodes, !config.parallelReplication)
+            Operations.fillCluster(clusterManager, config.collection, normalizedNodes, !config.parallelOps)
           }
           case "addreplica" => {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))
@@ -290,6 +301,16 @@ object CLI extends App with ManagerSupport {
             } while (!fullyActive)
 
             Operation.empty
+          }
+          case "backup" => {
+            Operations.backupCollection(
+              clusterManager,
+              config.collection,
+              config.backupDir,
+              config.backupLimit,
+              config.backupLeaders,
+              config.parallelOps
+            )
           }
         }
 

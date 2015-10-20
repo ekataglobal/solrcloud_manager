@@ -1,5 +1,8 @@
 package com.whitepages.cloudmanager.state
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import org.apache.solr.common.util.NamedList
 import scala.concurrent.duration._
 
@@ -36,12 +39,15 @@ trait SolrResponseHelper {
 case class GenericSolrResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper
 
 case class ReplicationStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
+  private val backupDateFormat = new SimpleDateFormat("EEE MMM dd HH:mm:ss z yyyy", Locale.ROOT)
 
   lazy val replicating = walk("details", "slave", "isReplicating")
   lazy val replicationTimeRemaining =
     walk("details", "slave", "timeRemaining").map(_.replace("s", "").toInt.seconds)
   lazy val generation = walk("details", "generation")
   lazy val indexVersion = walk("details", "indexVersion")
+  lazy val lastBackupSucceeded = walk("details", "backup", "status").map(_.toLowerCase == "success")
+  lazy val lastBackup = walk("details", "backup", "snapshotCompletedAt").map(backupDateFormat.parse)
 }
 
 case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {

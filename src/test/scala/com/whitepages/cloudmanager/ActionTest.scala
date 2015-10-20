@@ -1,5 +1,6 @@
 package com.whitepages.cloudmanager
 
+import org.apache.lucene.util.LuceneTestCase
 import org.junit.runner.RunWith
 import org.junit.Assert._
 import com.carrotsearch.randomizedtesting.RandomizedRunner
@@ -40,6 +41,7 @@ class ActionTest extends ManagerTestBase {
     testAlias(clusterManager)
     testCreateDeleteCollection(clusterManager)
     testFetchIndex(clusterManager)
+    testBackup(clusterManager)
 
   }
 
@@ -140,5 +142,13 @@ class ActionTest extends ManagerTestBase {
     assertTrue(Operation(Seq(DeleteCollection("fetchinto"))).execute(cloudClient))
   }
 
+  def testBackup(clusterManager: ClusterManager): Unit = {
+    val backupDir = LuceneTestCase.createTempDir("backups")
+
+    assertTrue(Operation(Seq(Backup(
+      "collection2_shard1_replica1",
+      backupDir.toAbsolutePath.toString
+    ))).execute(cloudClient))
+  }
 
 }

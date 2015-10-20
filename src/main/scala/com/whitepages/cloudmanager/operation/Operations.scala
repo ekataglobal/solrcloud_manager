@@ -1,6 +1,8 @@
 package com.whitepages.cloudmanager.operation
 
-import com.whitepages.cloudmanager.action.{FetchIndex, DeleteReplica, AddReplica}
+import java.nio.file.{Paths, Files, Path}
+
+import com.whitepages.cloudmanager.action.{Backup, FetchIndex, DeleteReplica, AddReplica}
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.ClusterManager
 import scala.annotation.tailrec
@@ -188,6 +190,35 @@ object Operations extends ManagerSupport {
       )
     }
     operations.fold(Operation.empty)(_ ++ _)
+  }
+
+  /**
+   * Requests a backup of the index for a given collection.
+   *
+   * If ANY node in your cluster has more than one replica, even replicas for a different collection,
+   * the core name will be appended to the backup dir provided. It's assumed that the path separator is the same on
+   * this machine and the nodes. In this case, "keep" will be be considered per-node AND per-core.
+   * So, the number of backups of a given core on a given node will be no greater than "keep".
+   * @param clusterManager
+   * @param collection
+   * @param dir The base directory on the node to save backups in. The core name will be appended.
+   * @param keep The number of backups to keep, per core, including this one. The new backup will be created before
+   *             old ones are cleaned, so you need space for n+1 backups.
+   * @param leaders If true, only backup the leader replicas for the collection.
+   * @param parallel Execute all backup requests without waiting to see if they finish.
+   * @return An operation that backs up the given collection.
+   */
+  def backupCollection(clusterManager: ClusterManager, collection: String,
+                       dir: String, keep: Int, leaders: Boolean, parallel: Boolean): Operation = {
+    val state = clusterManager.currentState
+    val collectionReplicas = state.liveReplicasFor(collection)
+    val backupReplicas = if (leaders) collectionReplicas.filter(_.leader) else collectionReplicas
+    // any node with more than one replica? The Solr backup naming and retention strategy doesn't distinguish
+    // the core, so append the core name to keep things distinct.
+    val backupCoreDir = state.allReplicas.groupBy(_.node).values.exists(_.length > 1)
+    def backupDir(core: String) = if (backupCoreDir) Paths.get(dir, core).toString else dir
+
+    Operation(backupReplicas.map(r => Backup(r.core, backupDir(r.core), !parallel, keep)))
   }
 
 
