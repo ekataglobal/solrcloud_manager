@@ -58,6 +58,11 @@ Some examples:
 If you don't want to run in SBT, or want a way to deploy the tool, "sbt assembly" should produce a stand-alone fat jar, 
 which you can run with a simple java command.
 
+    # build the assembly jar
+    sbt assembly
+    # Show the cluster state
+    java -jar target/scala-2.11/solrcloud_manager-assembly-1.1.0.jar -z zk0.example.com:2181/myapp
+
 
 Terminology:
 ============
