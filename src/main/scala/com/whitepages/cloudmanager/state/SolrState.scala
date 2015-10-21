@@ -35,7 +35,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
     "ActiveSlice",
     "ActiveReplica",
     "CoreName"
-  ).mkString("\t")
+  )
   def printReplicas() {
     comment.info("Nodes:")
     for { (node, nodeName) <- (allNodes.toList zip allNodes.toList.map(SolrReplica.hostName)).sortBy(_._2) } {
@@ -48,18 +48,22 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
           ")"
       )
     }
-    comment.info(printHeader)
-    for { replica <- allReplicas } {
-      comment.info(List(
+
+    val infoTable: Seq[List[String]] = printHeader +: (for { replica <- allReplicas } yield {
+      List(
         replica.collection,
         replica.sliceName.+(if (replica.leader) "*" else ""),
         replica.replicaName,
         replica.host,
-        replica.activeSlice,
-        replica.active,
+        replica.activeSlice.toString,
+        replica.active.toString,
         replica.core
-      ).mkString("\t"))
-    }
+      )
+    })
+
+    val colWidths = infoTable.transpose.map(s => s.maxBy(_.length).length)
+    val lineFormat = colWidths.map(w => s"%-${w}s").mkString(" ")
+    infoTable.foreach(row => comment.info(lineFormat.format(row:_*)))
   }
 
   lazy val collections = state.getCollections.asScala.toSeq.sorted
