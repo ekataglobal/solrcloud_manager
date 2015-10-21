@@ -2,7 +2,7 @@ package com.whitepages.cloudmanager.operation
 
 import java.nio.file.{Paths, Files, Path}
 
-import com.whitepages.cloudmanager.action.{Backup, FetchIndex, DeleteReplica, AddReplica}
+import com.whitepages.cloudmanager.action.{BackupIndex, FetchIndex, DeleteReplica, AddReplica}
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.cloud.Replica
@@ -225,7 +225,7 @@ object Operations extends ManagerSupport {
         dir
     }
 
-    Operation(backupReplicas.map(r => Backup(r.core, backupDir(r), !parallel, keep)))
+    Operation(backupReplicas.map(r => BackupIndex(r.core, backupDir(r), !parallel, keep)))
   }
 
 

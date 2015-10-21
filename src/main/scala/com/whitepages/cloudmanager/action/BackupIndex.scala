@@ -16,7 +16,7 @@ import scala.concurrent.duration._
  * @param numberToKeep Number of backups to keep, including this one. Note that the new backup is created
  *                     before the old ones are cleaned, so you need space for n+1 backups briefly.
  */
-case class Backup(core: String, backupDir: String, checkStatus: Boolean = true, numberToKeep: Int = 2) extends Action {
+case class BackupIndex(core: String, backupDir: String, checkStatus: Boolean = true, numberToKeep: Int = 2) extends Action {
 
   override def execute(clusterManager: ClusterManager): Boolean = {
 
@@ -43,5 +43,5 @@ case class Backup(core: String, backupDir: String, checkStatus: Boolean = true, 
   )
   override val postConditions: List[StateCondition] = Nil
 
-  override def toString = s"Backup: core: $core, dir: $backupDir, check: $checkStatus, keep: $numberToKeep"
+  override def toString = s"BackupIndex: core: $core, dir: $backupDir, check: $checkStatus, keep: $numberToKeep"
 }

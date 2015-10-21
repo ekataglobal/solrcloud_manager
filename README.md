@@ -117,7 +117,7 @@ This command returns when all replicas for the given node are active. No cluster
 Useful as a mechanism for delaying other actions. For example, preventing a rolling restart from overstepping
 your replication factor.
 
-**backup**:
+**backupindex**:
 For a given collection, save a copy of your index data onto the local disk of the nodes. This can protect you
 from user error like accidental deletion, but if you want to protect against hardware failure you'll still need
 a way to ship the backup copy off of the nodes somehow. Giving all your nodes a shared remote 

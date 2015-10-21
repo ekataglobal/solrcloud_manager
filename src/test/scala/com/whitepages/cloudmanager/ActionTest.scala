@@ -145,7 +145,7 @@ class ActionTest extends ManagerTestBase {
   def testBackup(clusterManager: ClusterManager): Unit = {
     val backupDir = LuceneTestCase.createTempDir("backups")
 
-    assertTrue(Operation(Seq(Backup(
+    assertTrue(Operation(Seq(BackupIndex(
       "collection2_shard1_replica1",
       backupDir.toAbsolutePath.toString
     ))).execute(cloudClient))
