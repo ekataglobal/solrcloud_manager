@@ -4,7 +4,8 @@ import java.nio.file.{Paths, Files, Path}
 
 import com.whitepages.cloudmanager.action.{Backup, FetchIndex, DeleteReplica, AddReplica}
 import org.apache.solr.client.solrj.impl.CloudSolrServer
-import com.whitepages.cloudmanager.state.ClusterManager
+import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
+import org.apache.solr.common.cloud.Replica
 import scala.annotation.tailrec
 import com.whitepages.cloudmanager.ManagerSupport
 
@@ -213,12 +214,18 @@ object Operations extends ManagerSupport {
     val state = clusterManager.currentState
     val collectionReplicas = state.liveReplicasFor(collection)
     val backupReplicas = if (leaders) collectionReplicas.filter(_.leader) else collectionReplicas
-    // any node with more than one replica? The Solr backup naming and retention strategy doesn't distinguish
-    // the core, so append the core name to keep things distinct.
-    val backupCoreDir = state.allReplicas.groupBy(_.node).values.exists(_.length > 1)
-    def backupDir(core: String) = if (backupCoreDir) Paths.get(dir, core).toString else dir
 
-    Operation(backupReplicas.map(r => Backup(r.core, backupDir(r.core), !parallel, keep)))
+    // any node with more than one replica? The Solr backup naming and retention strategy doesn't distinguish
+    // backups, so we may want to encode more distinguishing information in the directory structure
+    val dirAmbiguityPossible = state.allReplicas.groupBy(_.node).values.exists(_.length > 1)
+    def backupDir(core: SolrReplica) = {
+      if (dirAmbiguityPossible)
+        Paths.get(dir, core.collection, if (leaders) core.sliceName else core.core).toString
+      else
+        dir
+    }
+
+    Operation(backupReplicas.map(r => Backup(r.core, backupDir(r), !parallel, keep)))
   }
 
 
