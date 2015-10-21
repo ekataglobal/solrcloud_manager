@@ -149,6 +149,8 @@ class ActionTest extends ManagerTestBase {
       "collection2_shard1_replica1",
       backupDir.toAbsolutePath.toString
     ))).execute(cloudClient))
+
+    assertTrue(backupDir.toFile.listFiles().exists(f => f.isDirectory && f.toString.contains("snapshot")))
   }
 
 }
