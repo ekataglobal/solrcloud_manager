@@ -32,4 +32,8 @@ case class AddReplica(collection: String, slice: String, copyTo: String, waitUnt
   override val postConditions: List[StateCondition] = List(
     StateCondition("target node has the slice", Conditions.sliceIncludesNode(collection, slice, copyTo))
   )
+
+  override def toString = {
+    s"AddReplica: collection: $collection, slice: $slice, onto: $copyTo, waitUntilActive: $waitUntilActive, waitTimeout: $waitTimeoutSec"
+  }
 }

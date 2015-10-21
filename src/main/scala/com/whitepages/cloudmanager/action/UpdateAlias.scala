@@ -28,4 +28,6 @@ case class UpdateAlias(aliasName: String, aliasTo: Seq[String]) extends Action {
   }
 
   override val postConditions: List[StateCondition] = List()
+
+  override def toString = s"UpdateAlias: alias: $aliasName collections: " + aliasTo.mkString(",")
 }

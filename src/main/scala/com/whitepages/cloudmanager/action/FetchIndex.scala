@@ -70,4 +70,6 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
   }
 
   override val postConditions: List[StateCondition] = List()
+
+  override def toString = s"FetchIndex: from: $fromNode, fromCore: $fromCore, toCore: $toCore, hostContext: $hostContext"
 }

@@ -71,4 +71,12 @@ case class CreateCollection(collection: String,
   override val postConditions: List[StateCondition] = List(
     StateCondition("collection exists", Conditions.collectionExists(collection))
   )
+
+  override def toString = {
+    s"CreateCollection: name: $collection, slices: $numSlices, config: $configName" +
+    s", maxShardsPerNode: ${maxShardsPerNode.getOrElse(1)}" +
+    s", replicationFactor: ${replicationFactor.getOrElse(1)}" +
+    s", nodes: " + createNodeSet.map(_.mkString(",")).getOrElse("any") +
+    s", async: $async"
+  }
 }

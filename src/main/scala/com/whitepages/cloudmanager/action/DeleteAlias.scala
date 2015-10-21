@@ -26,4 +26,6 @@ case class DeleteAlias(aliasName: String) extends Action {
   }
 
   override val postConditions: List[StateCondition] = List()
+
+  override def toString = s"DeleteAlias: name: $aliasName"
 }

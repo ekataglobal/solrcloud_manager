@@ -47,4 +47,6 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
   override val postConditions: List[StateCondition] = List(
     StateCondition("replica no longer exists", Conditions.sliceIncludesNode(collection, slice, node).andThen(!_))
   )
+
+  override def toString = s"DeleteReplica: collection: $collection, slice: $slice, node: $node, safetyFactor: $safetyFactor"
 }

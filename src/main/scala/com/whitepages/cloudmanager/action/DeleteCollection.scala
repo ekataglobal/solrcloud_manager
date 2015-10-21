@@ -33,4 +33,6 @@ case class DeleteCollection(collection: String) extends Action {
   override val postConditions: List[StateCondition] = List(
     StateCondition("collection doesn't exist", Conditions.collectionExists(collection).andThen(!_))
   )
+
+  override def toString = s"DeleteCollection: name: $collection"
 }

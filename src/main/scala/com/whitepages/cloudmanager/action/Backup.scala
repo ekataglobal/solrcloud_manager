@@ -42,4 +42,6 @@ case class Backup(core: String, backupDir: String, checkStatus: Boolean = true, 
     StateCondition("core exists", Conditions.coreNameExists(core))
   )
   override val postConditions: List[StateCondition] = Nil
+
+  override def toString = s"Backup: core: $core, dir: $backupDir, check: $checkStatus, keep: $numberToKeep"
 }
