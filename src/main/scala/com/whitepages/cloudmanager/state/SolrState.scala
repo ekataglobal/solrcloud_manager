@@ -32,8 +32,7 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
     "Slice",
     "ReplicaName",
     "Host",
-    "ActiveSlice",
-    "ActiveReplica",
+    "Active",
     "CoreName"
   )
   def printReplicas() {
@@ -55,7 +54,6 @@ case class SolrState(state: ClusterState) extends ManagerSupport {
         replica.sliceName.+(if (replica.leader) "*" else ""),
         replica.replicaName,
         replica.host,
-        replica.activeSlice.toString,
         replica.active.toString,
         replica.core
       )
