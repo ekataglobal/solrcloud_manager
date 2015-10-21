@@ -23,7 +23,7 @@ case class Operation(actions: Seq[Action]) extends ManagerSupport {
     if (actions.isEmpty) {
       true
     } else {
-      comment.warn(calendar.getTime + " Beginning " + this)
+      comment.debug(calendar.getTime + " Beginning " + this)
       val success = actions.foldLeft(true)((goodSoFar, action) => {
         if (goodSoFar) {
           comment.debug(s"Starting to apply $action")
@@ -39,7 +39,7 @@ case class Operation(actions: Seq[Action]) extends ManagerSupport {
         }
         else goodSoFar
       })
-      comment.warn(calendar.getTime + " Finished " + this)
+      comment.debug(calendar.getTime + " Finished " + this)
       success
     }
   }

@@ -49,7 +49,7 @@ trait Action extends ManagerSupport {
     conditions.forall {
       condition => condition.check(state) match {
         case false => comment.warn(s"Check Failed: ${condition.name}"); false
-        case true  => comment.info(s"Check Succeeded: ${condition.name}"); true
+        case true  => comment.debug(s"Check Succeeded: ${condition.name}"); true
       }
     }
   }
