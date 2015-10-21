@@ -1,9 +1,10 @@
-package com.whitepages.cloudmanager.state
+package com.whitepages.cloudmanager.client
 
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.solr.common.util.NamedList
+
 import scala.concurrent.duration._
 
 trait SolrResponseHelper {
@@ -54,4 +55,30 @@ case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper 
   lazy val numDocs = walk("index", "numDocs").map(_.toInt)
   lazy val version = walk("index", "version")
   lazy val current = walk("index", "current").map(s => if (s == "true") true else false)
+}
+
+case class SystemStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
+  lazy val solrVersion = walk("lucene", "solr-spec-version").map(SolrCloudVersion(_)).getOrElse(SolrCloudVersion.unknown)
+}
+
+object SolrCloudVersion {
+  def parseVersion(version: String): SolrCloudVersion = {
+    val cleanVersion = version.trim.replaceAll("""\s""", "").replaceAll("-.*$", "")
+    val versions = cleanVersion.split('.')
+    val major = if (versions.length > 0) versions(0).toInt else 0
+    val minor = if (versions.length > 1) versions(1).toInt else 0
+    val patch = if (versions.length > 2) versions(2).toInt else 0
+    SolrCloudVersion(major, minor, patch)
+  }
+  def apply(version: String): SolrCloudVersion = parseVersion(version)
+  val unknown = SolrCloudVersion(0,0,0)
+}
+case class SolrCloudVersion(major: Int, minor: Int, patch: Int = 0) extends Ordered[SolrCloudVersion] {
+  override def compare(that: SolrCloudVersion): Int = {
+    if (major != that.major)      major.compareTo(that.major)
+    else if (minor != that.minor) minor.compareTo(that.minor)
+    else if (patch != that.patch) patch.compareTo(that.patch)
+    else 0
+  }
+  override val toString = List(major, minor, patch).mkString(".")
 }

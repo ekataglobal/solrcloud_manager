@@ -3,6 +3,7 @@ package com.whitepages.cloudmanager.action
 import java.nio.file.Path
 import java.util.Date
 
+import com.whitepages.cloudmanager.client.{SolrRequestHelpers, ReplicationHelpers}
 import com.whitepages.cloudmanager.state.ClusterManager
 import org.apache.solr.client.solrj.impl.HttpSolrClient
 import org.apache.solr.common.params.ModifiableSolrParams

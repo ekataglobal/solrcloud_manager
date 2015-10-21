@@ -149,7 +149,7 @@ TODO:
 
 * Pretty-print operation output
 * More consistent exception responses and handling (Use ManagerException more)
-* Solr version detection and failover to older APIs if possible
+* Cross version support (where possible)
 * Better introspection of solr responses
 * Insure paths other than /solr work
 

@@ -1,6 +1,7 @@
 package com.whitepages.cloudmanager.action
 
-import com.whitepages.cloudmanager.state.{LukeStateResponse, ReplicationStateResponse, ClusterManager}
+import com.whitepages.cloudmanager.client.{LukeStateResponse, ReplicationHelpers, SolrRequestHelpers}
+import com.whitepages.cloudmanager.state.ClusterManager
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.client.solrj.impl.{HttpSolrClient, HttpSolrServer}
 import org.apache.solr.client.solrj.{SolrClient, SolrServer}

@@ -1,5 +1,6 @@
 package com.whitepages.cloudmanager.action
 
+import com.whitepages.cloudmanager.client.SolrRequestHelpers
 import com.whitepages.cloudmanager.state.ClusterManager
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import org.apache.solr.common.params.ModifiableSolrParams

@@ -173,6 +173,7 @@ object CLI extends App with ManagerSupport {
         // get the requested operation
         val operation: Operation = config.mode match {
           case "clusterstatus" => {
+            clusterManager.printClusterVersion()
             clusterManager.printOverseer()
             clusterManager.printAliases()
             startState.printReplicas()

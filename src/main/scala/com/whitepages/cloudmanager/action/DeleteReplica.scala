@@ -1,11 +1,14 @@
 package com.whitepages.cloudmanager.action
 
+import com.whitepages.cloudmanager.client.{SolrCloudVersion, SolrRequestHelpers}
 import com.whitepages.cloudmanager.state.{SolrState, ClusterManager}
-import org.apache.solr.client.solrj.impl.CloudSolrServer
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 
 case class DeleteReplica(collection: String, slice: String, node: String, safetyFactor: Int = 1) extends Action {
+
+  private val deleteReplicaCleanupFix = SolrCloudVersion(4,10)
+
   override val preConditions: List[StateCondition] = List(
     StateCondition("replica exists on node", Conditions.sliceIncludesNode(collection, slice, node)),
     StateCondition(s"enough replicas to keep $safetyFactor alive", (state) => {
@@ -25,6 +28,8 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
   override def execute(clusterManager: ClusterManager): Boolean = {
     val replicaName = clusterManager.currentState.replicasFor(collection, slice).find(_.node == node).map(_.replicaName)
     if (replicaName.isDefined) {
+      if (clusterManager.clusterVersion < deleteReplicaCleanupFix)
+        comment.warn("WARNING: DeleteReplica does NOT remove the files from disk until 4.10. See SOLR-6072.")
       val params = new ModifiableSolrParams
       params.set("action", CollectionAction.DELETEREPLICA.toString)
       params.set("collection", collection)
