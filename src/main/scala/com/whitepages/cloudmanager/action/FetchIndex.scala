@@ -1,6 +1,6 @@
 package com.whitepages.cloudmanager.action
 
-import com.whitepages.cloudmanager.client.{LukeStateResponse, ReplicationHelpers, SolrRequestHelpers}
+import com.whitepages.cloudmanager.client.{LukeStateResponse, ReplicationHandlerHelpers, SolrRequestHelpers}
 import com.whitepages.cloudmanager.state.ClusterManager
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.client.solrj.impl.{HttpSolrClient, HttpSolrServer}
@@ -42,7 +42,7 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
 
     SolrRequestHelpers.submitRequest(client, params, s"/$toCore/replication") &&
       delay(5.seconds) &&
-      ReplicationHelpers.waitForReplication(client, toCore) &&
+      ReplicationHandlerHelpers.waitForReplication(client, toCore) &&
       insureDataCopy(fromClient, client)
   }
 

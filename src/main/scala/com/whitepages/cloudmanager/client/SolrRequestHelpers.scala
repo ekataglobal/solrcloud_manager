@@ -93,22 +93,30 @@ object SolrRequestHelpers extends ManagerSupport {
   }
 }
 
-object ReplicationHelpers extends ManagerSupport {
+object ReplicationHandlerHelpers extends ManagerSupport {
 
   private val detailsReq = new ModifiableSolrParams
   detailsReq.set("command", "details")
+  private val restoreStatusReq = new ModifiableSolrParams
+  restoreStatusReq.set("command", "restorestatus")
 
-  private def getReplicationDetails(client: SolrClient, core: String): Try[ReplicationStateResponse] = {
+  def getReplicationDetails(client: SolrClient, core: String): Try[ReplicationStateResponse] = {
     val checkResponse = SolrRequestHelpers.getSolrResponse(client, detailsReq, s"/$core/replication")
     checkResponse.map(r => ReplicationStateResponse(r.rsp))
+  }
+
+  def getRestoreStatus(client: SolrClient, core: String): Try[RestoreStateResponse] = {
+    val restoreResponse = SolrRequestHelpers.getSolrResponse(client, restoreStatusReq, s"/$core/replication")
+    restoreResponse.map(r => RestoreStateResponse(r.rsp))
   }
 
   def checkFetchIndexResponse(rsp: SolrResponseHelper): Boolean = {
     rsp.status == "0" && rsp.walk("status") == Some("OK")
   }
-  def checkReplicationStatusResponse(rsp: SolrResponseHelper): Boolean = {
+  def checkStatusResponse(rsp: SolrResponseHelper): Boolean = {
     rsp.status == "0"
   }
+
   def checkRemainingReplicationTime(rsp: ReplicationStateResponse): Int = {
     (rsp.replicating, rsp.replicationTimeRemaining) match {
       case (None, _) => 1 // the appropriate node hasn't shown up yet
@@ -126,7 +134,7 @@ object ReplicationHelpers extends ManagerSupport {
 
     val checkResponse = getReplicationDetails(client, core)
     checkResponse match {
-      case Success(r) if checkReplicationStatusResponse(r) => {
+      case Success(r) if checkStatusResponse(r) => {
         val remaining = checkRemainingReplicationTime(r).seconds
         if (remaining == 0.seconds) {
           true
@@ -138,7 +146,33 @@ object ReplicationHelpers extends ManagerSupport {
           waitForReplication(client, core)
         }
       }
-      case Success(r) if !checkReplicationStatusResponse(r) => {
+      case Success(r) if !checkStatusResponse(r) => {
+        comment.warn(s"Unexpected response checking replication status: $r")
+        false
+      }
+      case Failure(e) => {
+        comment.warn(s"Error checking replication status, $e")
+        false
+      }
+    }
+  }
+
+  @tailrec
+  def waitForBackup(client: SolrClient, core: String, since: Date): Boolean = {
+    val checkResponse = getReplicationDetails(client, core)
+    checkResponse match {
+      case Success(r) if checkStatusResponse(r) => {
+        (r.lastBackup, r.lastBackupSucceeded) match {
+          case (Some(when), Some(succeeded)) if when.after(since) =>
+            // the last backup date doesn't get updated until the backup finishes
+            succeeded
+          case _ =>
+            comment.info(s"Waiting for backup request of $core to complete")
+            delay(3.seconds)
+            waitForBackup(client, core, since)
+        }
+      }
+      case Success(r) if !checkStatusResponse(r) => {
         comment.warn(s"Unexpected response checking replication status: $r")
         false
       }
@@ -151,30 +185,26 @@ object ReplicationHelpers extends ManagerSupport {
   }
 
   @tailrec
-  def waitForBackup(client: SolrClient, core: String, since: Date): Boolean = {
-    val checkResponse = getReplicationDetails(client, core)
+  def waitForRestore(client: SolrClient, core: String): Boolean = {
+    val checkResponse = getRestoreStatus(client, core)
     checkResponse match {
-      case Success(r) if checkReplicationStatusResponse(r) => {
-        (r.lastBackup, r.lastBackupSucceeded) match {
-          case (Some(when), Some(succeeded)) if when.after(since) =>
-            // the last backup date doesn't get updated until the backup finishes
-            succeeded
-          case _ =>
-            comment.info(s"Waiting for backup request of $core to complete")
-            delay(5.seconds)
-            waitForBackup(client, core, since)
+      case Success(r) if checkStatusResponse(r) =>
+        if (r.restoreSuccess) true
+        else if (r.restoreFailure) false
+        else {
+          comment.info(s"Waiting for restore request of $core to complete")
+          delay(3.seconds)
+          waitForRestore(client, core)
         }
-      }
-      case Success(r) if !checkReplicationStatusResponse(r) => {
-        comment.warn(s"Unexpected response checking replication status: $r")
+      case Success(r) if !checkStatusResponse(r) => {
+        comment.warn(s"Unexpected response checking restore status: $r")
         false
       }
       case Failure(e) => {
-        comment.warn(s"Error checking replication status, $e")
+        comment.warn(s"Error checking restore status, $e")
         false
       }
     }
-
   }
 }
 

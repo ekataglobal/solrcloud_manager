@@ -122,6 +122,10 @@ For a given collection, save a copy of your index data onto the local disk of th
 from user error like accidental deletion, but if you want to protect against hardware failure you'll still need
 a way to ship the backup copy off of the nodes somehow. Giving all your nodes a shared remote 
 filesystem (ie, NFS) and specifying that as the backup directory would work.
+
+**restoreindex**:
+For a given collection, restore a backup created by this tool into that collection. Assumes the backup
+was created by this tool, and that the directory was a shared filesystem.
     
 **copy**: (Experimental)
 Provides a method of doing **cross cluster** bulk data deployment. Several caveats:

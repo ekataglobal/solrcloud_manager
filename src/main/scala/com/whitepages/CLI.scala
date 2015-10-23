@@ -47,7 +47,7 @@ object CLI extends App with ManagerSupport {
                         parallelOps: Boolean = false,
                         backupLimit: Int = 2,
                         backupDir: String = "",
-                        backupLeaders: Boolean = true
+                        restoreCollection: Option[String] = None
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
@@ -145,11 +145,18 @@ object CLI extends App with ManagerSupport {
     cmd("backupindex") action { (_, c) =>
       c.copy(mode = "backupindex") } text("Triggers a backup request for a given collection") children(
       opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to back up"),
-      opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on each node to put the backup in. The core name will be appended if any nodes have more than one core."),
+      opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on each node to put the backup in. The collection and slice names will be appended. Typically a shared filesystem across all nodes."),
       opt[Int]("keep") optional() action { (x, c) => { c.copy(backupLimit = x) } } text("The number of backups for a given node/core to keep. Default 2."),
-      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica backup succeeds"),
-      opt[Unit]("all") optional() action { (x, c) => { c.copy(backupLeaders = false) } } text("Back up all replicas, not just leaders")
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica backup succeeds")
       )
+    cmd("restoreindex") action { (_, c) =>
+      c.copy(mode = "restoreindex") } text("Loads a backup into an existing collection") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to restore into"),
+      opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on the nodes where the backup index data is saved. Typically a shared filesystem across all nodes."),
+      opt[String]("restoreFrom") optional() action { (x, c) => { c.copy(restoreCollection = Some(x)) } } text("Restore this collection name's index data. (used if a different collection name made the backup)"),
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica restore succeeds")
+      )
+
     checkConfig{
       c =>
         if (c.zk.isEmpty) failure("provide a zookeeper connection string, with port and (optional) chroot")
@@ -309,9 +316,11 @@ object CLI extends App with ManagerSupport {
               config.collection,
               config.backupDir,
               config.backupLimit,
-              config.backupLeaders,
               config.parallelOps
             )
+          }
+          case "restoreindex" => {
+            Operations.restoreCollection(clusterManager, config.collection, config.backupDir, config.restoreCollection)
           }
         }
 

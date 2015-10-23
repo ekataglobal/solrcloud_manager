@@ -1,8 +1,9 @@
 package com.whitepages.cloudmanager.operation
 
 import java.nio.file.{Paths, Files, Path}
+import java.util
 
-import com.whitepages.cloudmanager.action.{BackupIndex, FetchIndex, DeleteReplica, AddReplica}
+import com.whitepages.cloudmanager.action._
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.cloud.Replica
@@ -194,38 +195,61 @@ object Operations extends ManagerSupport {
   }
 
   /**
-   * Requests a backup of the index for a given collection.
+   * Requests a backup of the index for a given collection. Only the leader replica for each slice will create a backup.
    *
-   * If ANY node in your cluster has more than one replica, even replicas for a different collection,
-   * the core name will be appended to the backup dir provided. It's assumed that the path separator is the same on
-   * this machine and the nodes. In this case, "keep" will be be considered per-node AND per-core.
-   * So, the number of backups of a given core on a given node will be no greater than "keep".
+   * In order for this to function as a reliable backup mechanism, or for the "restoreCollection" operation to work,
+   * the dir must be a shared filesystem among all nodes.
+   *
+   * The collection and slice name will be appended to the backup dir provided. It's assumed that the
+   * path separator is the same on this machine and the nodes. "keep" will be be considered per-slice.
+   * So, the number of backups of each slice on a given node will be no greater than "keep".
+   *
+   * This does NOT back up any cluster state stored in Zookeeper, including the collection definition or config.
    * @param clusterManager
    * @param collection
-   * @param dir The base directory on the node to save backups in. The core name will be appended.
-   * @param keep The number of backups to keep, per core, including this one. The new backup will be created before
+   * @param dir The base directory on the node to save backups in.
+   * @param keep The number of backups to keep, per slice, including this one. The new backup will be created before
    *             old ones are cleaned, so you need space for n+1 backups.
-   * @param leaders If true, only backup the leader replicas for the collection.
    * @param parallel Execute all backup requests without waiting to see if they finish.
    * @return An operation that backs up the given collection.
    */
   def backupCollection(clusterManager: ClusterManager, collection: String,
-                       dir: String, keep: Int, leaders: Boolean, parallel: Boolean): Operation = {
+                       dir: String, keep: Int, parallel: Boolean): Operation = {
     val state = clusterManager.currentState
     val collectionReplicas = state.liveReplicasFor(collection)
-    val backupReplicas = if (leaders) collectionReplicas.filter(_.leader) else collectionReplicas
+    val backupReplicas = collectionReplicas.filter(_.leader)
 
-    // any node with more than one replica? The Solr backup naming and retention strategy doesn't distinguish
-    // backups, so we may want to encode more distinguishing information in the directory structure
-    val dirAmbiguityPossible = state.allReplicas.groupBy(_.node).values.exists(_.length > 1)
-    def backupDir(core: SolrReplica) = {
-      if (dirAmbiguityPossible)
-        Paths.get(dir, core.collection, if (leaders) core.sliceName else core.core).toString
-      else
-        dir
-    }
+    // The default Solr backup naming and retention strategy doesn't distinguish backups, so we
+    // want to encode more distinguishing information in the directory structure
+    def backupDir(replica: SolrReplica) = Paths.get(dir, replica.collection, replica.sliceName).toString
 
     Operation(backupReplicas.map(r => BackupIndex(r.core, backupDir(r), !parallel, keep)))
+  }
+
+  /**
+   * Restores all cores in a given collection from the most recent backup made by this tool.
+   *
+   * Presumes the necessary slices are available on the necessary nodes. In practice, the only way to know this
+   * for sure is if the dir is a shared filesystem across all nodes, or if you only have one node in your cluster.
+   *
+   * Presumes that the collection you're restoring into is mostly identical (schema, shard count, etc) to the
+   * one that made the backup, and that the backup was made by this tool. Only the collection name and replication
+   * factor should be different.
+   * @param clusterManager
+   * @param collection The name of the (existing) collection to restore into
+   * @param dir The same value used for the backup command
+   * @param oldCollection The name of the collection that made the backup, if different.
+   * @return An operation that restores the given collection.
+   */
+  def restoreCollection(clusterManager: ClusterManager, collection: String,
+                        dir: String, oldCollection: Option[String]): Operation = {
+    val state = clusterManager.currentState
+    val collectionReplicas = state.liveReplicasFor(collection)
+    def backupDir(replica: SolrReplica) = {
+      Paths.get(dir, oldCollection.getOrElse(replica.collection), replica.sliceName).toString
+    }
+
+    Operation(collectionReplicas.map(r => RestoreIndex(r.core, backupDir(r))))
   }
 
 

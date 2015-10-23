@@ -1,5 +1,13 @@
 package com.whitepages.cloudmanager
 
+import java.io.IOException
+import java.util
+
+import org.apache.lucene.util.LuceneTestCase
+import org.apache.solr.client.solrj.SolrServerException
+import org.apache.solr.client.solrj.impl.{CloudSolrClient, HttpSolrClient}
+import org.apache.solr.client.solrj.response.UpdateResponse
+import org.apache.solr.common.SolrInputDocument
 import org.junit.runner.RunWith
 import org.junit.Assert._
 import com.carrotsearch.randomizedtesting.RandomizedRunner
@@ -34,7 +42,7 @@ class OperationsTest extends ManagerTestBase {
     testPopulateCluster(clusterManager)
     testFillCluster(clusterManager)
     testCleanCluster(clusterManager)
-
+    testBackupRestore(clusterManager)
   }
 
   def testPopulateCluster(clusterManager: ClusterManager): Unit = {
@@ -83,15 +91,9 @@ class OperationsTest extends ManagerTestBase {
 
   def testFillCluster(clusterManager: ClusterManager): Unit = {
     val liveNodes = clusterManager.currentState.liveNodes.size
-    def addCollection(collection: String, numSlices: Int, maxSlicesPerNode: Int, replicationFactor: Int) {
-      assertEquals(0, numSlices % maxSlicesPerNode)
-      val neededNodes = (numSlices / maxSlicesPerNode) * replicationFactor
-      val targetNodes = clusterManager.currentState.liveNodes.take(neededNodes).toSeq
-      val createCollection = Operation(Seq(CreateCollection(collection, numSlices, "conf1", Some(numSlices), Some(replicationFactor), Some(targetNodes))))
-      assertTrue(createCollection.execute(cloudClient))
-    }
+
     // test with two shards per node, with an initial replicationFactor of 2
-    addCollection("testfill", 2, 2, 2)
+    addCollection(clusterManager, "testfill", 2, 2, 2)
     assertEquals(2, clusterManager.currentState.nodesWithCollection("testfill").size)
 
     assertTrue(Operations.fillCluster(clusterManager, "testfill").execute(cloudClient))
@@ -103,7 +105,7 @@ class OperationsTest extends ManagerTestBase {
     assertTrue(Operation(Seq(DeleteCollection("testfill"))).execute(cloudClient))
 
     // test with two shards, one per node, with an initial replicationFactor of 1
-    addCollection("testfill", 2, 1, 1)
+    addCollection(clusterManager, "testfill", 2, 1, 1)
     assertEquals(2, clusterManager.currentState.nodesWithCollection("testfill").size)
 
     assertTrue(Operations.fillCluster(clusterManager, "testfill").execute(cloudClient))
@@ -114,6 +116,8 @@ class OperationsTest extends ManagerTestBase {
     assertEquals("one slice should be on three nodes", 1, sliceCounts.count(_ == 3))
     assertEquals("the other slice should be on two nodes", 1, sliceCounts.count(_ == 2))
 
+    // cleanup
+    assertTrue(Operation(Seq(DeleteCollection("testfill"))).execute(cloudClient))
   }
 
   def testCleanCluster(clusterManager: ClusterManager): Unit = {
@@ -134,7 +138,70 @@ class OperationsTest extends ManagerTestBase {
     assertEquals("only one node has the collection", 1, clusterManager.currentState.nodesWithCollection("testcollection").length)
 
     controlJetty.start() // restore normalicy
+    assertTrue(Operation(Seq(DeleteCollection("testcollection"))).execute(cloudClient))
+  }
+
+  def testBackupRestore(clusterManager: ClusterManager): Unit = {
+    val collectionName = "testcollection"
+    val restoreCollectionName = "testcollection2"
+    val docCount = 10
+    val backupDir = LuceneTestCase.createTempDir("backups")
+
+    //make a collection and index into it
+    addCollection(clusterManager, collectionName, numSlices = 2, maxSlicesPerNode = 2, replicationFactor = 2)
+    addDocs(collectionName, docCount)
+    assertEquals(docCount, countDocs(collectionName))
+    assertTrue(
+      Operations.backupCollection(clusterManager, collectionName, backupDir.toAbsolutePath.toString, 1, parallel = false)
+        .execute(cloudClient)
+    )
+
+    //make a new equivalent collection, and restore into it
+    addCollection(clusterManager, restoreCollectionName, numSlices = 2, maxSlicesPerNode = 2, replicationFactor = 2)
+    assertEquals(0, countDocs(restoreCollectionName))
+    assertTrue(
+      Operations.restoreCollection(clusterManager, restoreCollectionName, backupDir.toAbsolutePath.toString, Some(collectionName))
+        .execute(cloudClient)
+    )
+    assertEquals(docCount, countDocs(restoreCollectionName))
+
+    // cleanup
+    assertTrue(Operation(Seq(DeleteCollection(collectionName))).execute(cloudClient))
+    assertTrue(Operation(Seq(DeleteCollection(restoreCollectionName))).execute(cloudClient))
   }
 
 
+  private def addCollection(clusterManager: ClusterManager, collection: String, numSlices: Int, maxSlicesPerNode: Int, replicationFactor: Int) {
+    assertEquals(0, numSlices % maxSlicesPerNode)
+    val neededNodes = (numSlices / maxSlicesPerNode) * replicationFactor
+    val targetNodes = clusterManager.currentState.liveNodes.take(neededNodes).toSeq
+    val createCollection = Operation(Seq(CreateCollection(collection, numSlices, "conf1", Some(numSlices), Some(replicationFactor), Some(targetNodes))))
+    assertTrue(createCollection.execute(cloudClient))
+  }
+  private def addDocs(collection: String, docCount: Int) {
+    val docs = (0 until docCount).map( i => {
+      val doc: SolrInputDocument = new SolrInputDocument
+      doc.addField("id", i)
+      doc.addField("name", "foo")
+      doc
+    })
+    var resp: UpdateResponse = cloudClient.add(collection, docs.asJava)
+
+    assertEquals(0, resp.getStatus)
+    resp = cloudClient.commit(collection)
+    assertEquals(0, resp.getStatus)
+  }
+  private def countDocs(collection: String) = {
+    val params = new ModifiableSolrParams
+    params.set("q", "*:*")
+    val resp = cloudClient.query(collection, params)
+    assertEquals(0, resp.getStatus)
+    resp.getResults.getNumFound
+  }
+  private def wipeDocs(collection: String) = {
+    var resp = cloudClient.deleteByQuery(collection, "*:*")
+    assertEquals(0, resp.getStatus)
+    resp = cloudClient.commit(collection)
+    assertEquals(0, resp.getStatus)
+  }
 }

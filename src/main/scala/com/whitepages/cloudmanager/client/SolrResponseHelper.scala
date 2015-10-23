@@ -49,6 +49,7 @@ case class ReplicationStateResponse(rsp: NamedList[AnyRef]) extends SolrResponse
   lazy val indexVersion = walk("details", "indexVersion")
   lazy val lastBackupSucceeded = walk("details", "backup", "status").map(_.toLowerCase == "success")
   lazy val lastBackup = walk("details", "backup", "snapshotCompletedAt").map(backupDateFormat.parse)
+  lazy val indexPath = walk("details", "indexPath")
 }
 
 case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
@@ -59,6 +60,14 @@ case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper 
 
 case class SystemStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
   lazy val solrVersion = walk("lucene", "solr-spec-version").map(SolrCloudVersion(_)).getOrElse(SolrCloudVersion.unknown)
+}
+
+case class RestoreStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
+  lazy val restoreStatus = walk("restorestatus", "status")
+  // note: could be neither failed nor success (particularly, "No restore actions in progress")
+  lazy val restoreSuccess = restoreStatus.exists(_.toLowerCase == "success")
+  lazy val restoreFailure = restoreStatus.exists(_.toLowerCase == "failed")
+  lazy val restoreSnapshotName = walk("restorestatus", "snapshotName")
 }
 
 object SolrCloudVersion {
