@@ -173,7 +173,7 @@ object CLI extends App with ManagerSupport {
       var success = false
 
       try {
-        val clusterManager = new ClusterManager(config.zk)
+        val clusterManager = ClusterManager(config.zk)
         possibleClusterManager = Some(clusterManager)     // stash for later shutdown
         val startState = clusterManager.currentState
 

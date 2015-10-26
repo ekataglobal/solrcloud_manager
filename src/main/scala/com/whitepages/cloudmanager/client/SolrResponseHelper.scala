@@ -4,13 +4,14 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.solr.common.util.NamedList
-
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 trait SolrResponseHelper {
   implicit val rsp: NamedList[AnyRef]
 
   // solr response objects are annoying.
+  // TODO: Use NamedList.findRecursive?
   def walk(directions: String*): Option[String] = walk(directions.toList)
   def walk(directions: List[String])(implicit node: NamedList[AnyRef]): Option[String] = {
     directions.length match {
@@ -60,6 +61,17 @@ case class LukeStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper 
 
 case class SystemStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {
   lazy val solrVersion = walk("lucene", "solr-spec-version").map(SolrCloudVersion(_)).getOrElse(SolrCloudVersion.unknown)
+  lazy val zkHost =
+    walk("zkHost") // solr 5.x
+    .orElse(findCmdLineArg("-DzkHost=")) // solr 4.x
+
+
+  def jmxNode = Option(rsp.findRecursive("jvm", "jmx")).map(_.asInstanceOf[NamedList[AnyRef]])
+  def findCmdLineArg(argPrefix: String) = {
+    val argsOpt = jmxNode.flatMap(n => Option(n.get("commandLineArgs"))).map(_.asInstanceOf[java.util.List[String]].asScala)
+    argsOpt.flatMap(arg => arg.find(_.startsWith(argPrefix))).map(_.replace(argPrefix, ""))
+  }
+
 }
 
 case class RestoreStateResponse(rsp: NamedList[AnyRef]) extends SolrResponseHelper {

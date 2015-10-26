@@ -4,7 +4,7 @@ import java.util.Date
 
 import com.whitepages.cloudmanager.ManagerSupport
 import org.apache.solr.client.solrj.SolrClient
-import org.apache.solr.client.solrj.impl.CloudSolrClient
+import org.apache.solr.client.solrj.impl.{HttpSolrClient, CloudSolrClient}
 import org.apache.solr.client.solrj.request.QueryRequest
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 import org.apache.solr.common.params.ModifiableSolrParams
@@ -206,5 +206,21 @@ object ReplicationHandlerHelpers extends ManagerSupport {
       }
     }
   }
+}
+
+object SystemRequestHelpers {
+
+  private val systemReq = new ModifiableSolrParams
+
+
+  def getSystemInfo(url: String): Try[SystemStateResponse] = {
+    val client = new HttpSolrClient(url)
+    getSystemInfo(client)
+  }
+  def getSystemInfo(client: SolrClient): Try[SystemStateResponse] = {
+    SolrRequestHelpers.getSolrResponse(client, systemReq, "/admin/info/system")
+      .map(r => SystemStateResponse(r.rsp))
+  }
+
 }
 
