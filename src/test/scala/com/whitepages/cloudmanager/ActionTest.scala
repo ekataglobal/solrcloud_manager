@@ -130,11 +130,9 @@ class ActionTest extends ManagerTestBase {
     cloudClient.setDefaultCollection(defaultCollection)
     assertEquals(numDocs, collectionSize("fetchfrom"))
 
-    // url-encode any slashes in the hostContext besides the first
-    val hostContext = "/" + java.net.URLEncoder.encode(System.getProperty("hostContext").tail, "UTF-8")
-    println("HostContext: " + System.getProperty("hostContext") + " becomes " + hostContext)
-    println("targetNode: " + targetNode)
-    assertTrue(Operation(Seq(FetchIndex("fetchfrom_shard1_replica1", "fetchinto_shard1_replica1", targetNode, hostContext))).execute(cloudClient))
+    val targetNodeUrl = clusterManager.currentState.replicasFor("fetchinto").head.url
+
+    assertTrue(Operation(Seq(FetchIndex("fetchfrom_shard1_replica1", "fetchinto_shard1_replica1", targetNodeUrl))).execute(cloudClient))
     assertEquals(numDocs, collectionSize("fetchinto"))
 
     // clean up

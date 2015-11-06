@@ -169,6 +169,28 @@ class OperationsTest extends ManagerTestBase {
     assertTrue(Operation(Seq(DeleteCollection(collectionName))).execute(cloudClient))
     assertTrue(Operation(Seq(DeleteCollection(restoreCollectionName))).execute(cloudClient))
   }
+  def testCopyCollection(clusterManager: ClusterManager): Unit = {
+    val fromCollectionName = "testcollection"
+    val targetCollectionName = "testcollection2"
+    val docCount = 10
+
+    //make a collection and index into it
+    addCollection(clusterManager, fromCollectionName, numSlices = 2, maxSlicesPerNode = 2, replicationFactor = 2)
+    addDocs(fromCollectionName, docCount)
+    assertEquals(docCount, countDocs(fromCollectionName))
+
+    //make a new, empty, but otherwise identical collection
+    addCollection(clusterManager, targetCollectionName, numSlices = 2, maxSlicesPerNode = 2, replicationFactor = 2)
+
+    assertTrue(
+      Operations.copyCollection(clusterManager, targetCollectionName, clusterManager, fromCollectionName).execute(clusterManager)
+    )
+    assertEquals(docCount, countDocs(targetCollectionName))
+
+    // cleanup
+    assertTrue(Operation(Seq(DeleteCollection(targetCollectionName))).execute(cloudClient))
+    assertTrue(Operation(Seq(DeleteCollection(fromCollectionName))).execute(cloudClient))
+  }
 
 
   private def addCollection(clusterManager: ClusterManager, collection: String, numSlices: Int, maxSlicesPerNode: Int, replicationFactor: Int) {

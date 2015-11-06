@@ -1,7 +1,7 @@
 package com.whitepages.cloudmanager.state
 
 import com.whitepages.cloudmanager.client.{SystemRequestHelpers, SystemStateResponse, SolrCloudVersion, SolrRequestHelpers}
-import org.apache.solr.common.cloud.{ZooKeeperException}
+import org.apache.solr.common.cloud.{ZkStateReader, ZooKeeperException}
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.zookeeper.KeeperException
 import org.apache.zookeeper.data.Stat
@@ -12,6 +12,7 @@ import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
 import scala.util.{Try, Random}
 
 object ClusterManager extends ManagerSupport {
+
   private def zkFromNode(url: String) = {
     val zkHostOpt = SystemRequestHelpers.getSystemInfo(url).map(_.zkHost)
     if (zkHostOpt.isFailure)
@@ -39,8 +40,9 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
 
   def currentState = {
     stateReader.updateClusterState(true)
-    SolrState(stateReader.getClusterState)
+    SolrState(stateReader.getClusterState, CollectionInfo((c: String) => stateReader.readConfigName(c)), configs)
   }
+
   def aliasMap: scala.collection.Map[String, String] = {
     stateReader.updateAliases()
     val aliases = stateReader.getAliases.getCollectionAliasMap
@@ -91,6 +93,17 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
   def printClusterVersion(): Unit = {
     comment.info(s"Cluster Version: $clusterVersion")
   }
+
+
+  // I wish this was included in stateReader.getClusterState
+  def configs: Set[String] = {
+    client.getZkStateReader.getZkClient.getChildren(ZkStateReader.CONFIGS_ZKNODE, null, true).asScala.toSet
+  }
+  def configExists(configName: String) = configs.contains(configName)
+  def printConfigs(): Unit = {
+    comment.info("Config sets: " + configs.mkString(", "))
+  }
+
 
 
   def shutdown() = {

@@ -16,36 +16,36 @@ import scala.concurrent.duration._
  *     and you'd end up with slices that don't have the same doc routing you expect.
  *   - The toCore MUST be empty, or it may decline to update because it thinks it's local version is newer.
  *   - Be sure to hard commit on the cluster you're copying from before you start.
- *   - I'm not sure what will happen if you try this copying from a cluster that's taking updates. At the least, the
- *     generation/version checks after the copy finishes will probably fail.
  * @param fromCore The name of the core to copy, ie collection1_shard1_replica2
  * @param toCore The name of the core to copy into. This could be different to account for copying
  *               from one replica of a given shard into another
- * @param fromNode The node to copy from, ie 10.8.100.42:8983
+ * @param fromNode The node to copy from, ie http://10.8.100.42:8983/solr
+ * @param confirm Whether to try to confirm the copy worked. (currently by comparing doc counts)
  */
-case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostContext: String = "/solr") extends Action {
+case class FetchIndex(fromCore: String, toCore: String, fromNode: String, confirm: Boolean = true) extends Action {
   override val preConditions: List[StateCondition] = List(
     StateCondition("target has the named core", Conditions.coreNameExists(toCore))
   )
 
   override def execute(clusterManager: ClusterManager): Boolean = {
     val targetReplica = clusterManager.currentState.allReplicas.filter( (r) => r.core == toCore).head
-    val fromUrl = s"http://$fromNode$hostContext"
 
-    // don't use a CloudSolrServer for this stuff, go to the node directly
-    val client = new HttpSolrClient(s"http://${targetReplica.host}")
-    val fromClient = new HttpSolrClient(fromUrl)
+    // don't use a CloudSolrClient for this stuff, go to the node directly
+    val client = new HttpSolrClient(targetReplica.url)
+    val fromClient = new HttpSolrClient(fromNode)
 
     val params = new ModifiableSolrParams
     params.set("command", "fetchindex")
-    params.set("masterUrl", fromUrl + "/" + fromCore)
+    params.set("masterUrl", fromNode + "/" + fromCore)
 
     SolrRequestHelpers.submitRequest(client, params, s"/$toCore/replication") &&
-      delay(5.seconds) &&
+      delay(3.seconds) &&
       ReplicationHandlerHelpers.waitForReplication(client, toCore) &&
-      insureDataCopy(fromClient, client)
+      (if (confirm) insureDataCopy(fromClient, client) else true)
   }
 
+  // TODO: Find a reliable method of insuring the data copied successfully
+  // that works with non-static indexes
   private def insureDataCopy(fromClient: SolrClient, toClient: SolrClient): Boolean = {
     val detailsParams = new ModifiableSolrParams()
     detailsParams.set("show", "index")
@@ -71,5 +71,5 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, hostCo
 
   override val postConditions: List[StateCondition] = List()
 
-  override def toString = s"FetchIndex: from: $fromNode, fromCore: $fromCore, toCore: $toCore, hostContext: $hostContext"
+  override def toString = s"FetchIndex: from: $fromNode, fromCore: $fromCore, toCore: $toCore"
 }

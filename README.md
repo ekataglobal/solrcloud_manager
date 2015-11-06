@@ -127,11 +127,12 @@ filesystem (ie, NFS) and specifying that as the backup directory would work.
 For a given collection, restore a backup created by this tool into that collection. Assumes the backup
 was created by this tool, and that the directory was a shared filesystem.
     
-**copy**: (Experimental)
-Provides a method of doing **cross cluster** bulk data deployment. Several caveats:
+**copycollection**: (Experimental)
+Provides a method for copying collection index data into another collection, even **across solrcloud clusters** 
+Some caveats: 
     
-1. The collection MUST exist in both clusters.
-1. The collections in each cluster MUST have the same number of slices. Hashing MUST be identical, and there's 
+1. Both collections MUST already exist.
+1. The collections MUST have the same number of slices. Hashing MUST be identical, and there's 
 no check for this!
 1. The collection you're copying into should be empty - if it isn't, solr may silently decide a slice is
 newer than the data you're trying to copy, and fail to do so.

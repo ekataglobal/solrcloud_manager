@@ -26,7 +26,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive
   lazy val host = hostName(node)
 }
 
-case class SolrState(state: ClusterState) extends ManagerSupport {
+case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, configs: Set[String]) extends ManagerSupport {
   val printHeader = List(
     "Collection",
     "Slice",

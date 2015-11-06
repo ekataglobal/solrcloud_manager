@@ -19,6 +19,7 @@ import scala.concurrent.duration._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.annotation.tailrec
+import scala.collection._
 
 
 object CLI extends App with ManagerSupport {
@@ -28,7 +29,7 @@ object CLI extends App with ManagerSupport {
                         collection: String = "",
                         slicesPerNode: Int = 0,
                         wipe: Boolean = false,
-                        confirm: Boolean = true,
+                        prompt: Boolean = true,
                         slice: String = "",
                         node: String = "",
                         node2: String = "",
@@ -47,13 +48,16 @@ object CLI extends App with ManagerSupport {
                         parallelOps: Boolean = false,
                         backupLimit: Int = 2,
                         backupDir: String = "",
-                        restoreCollection: Option[String] = None
+                        restoreCollection: Option[String] = None,
+                        fromCollection: String = "",
+                        altClusterRef: String = "",
+                        confirmOp: Boolean = true
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
     opt[String]('z', "zk") required() action { (x, c) => { c.copy(zk = x) } } text("Zookeeper connection string, including any chroot path")
     opt[Unit]("confirm") optional() action { (_, c) =>
-      c.copy(confirm = false) } text("Assume the operation is confirmed, don't prompt")
+      c.copy(prompt = false) } text("Assume the operation is confirmed, don't prompt")
     opt[Unit]('d', "debug") optional() action { (_, c) =>
       c.copy(outputLevel = Level.DEBUG) } text("debug output")
     opt[Unit]('q', "quiet") optional() action { (_, c) =>
@@ -132,9 +136,16 @@ object CLI extends App with ManagerSupport {
           c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts.")
       )
     cmd("copy") action { (_, c) =>
-      c.copy(mode = "copy") } text("(EXPERIMENTAL) Copies a collection from one cluster to another. The collection you're copying into MUST pre-exist, be empty, and have the same number of slices.") children(
+      c.copy(mode = "copy") } text("(DEPRECATED) Use 'copycollection' instead") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
-        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983'")
+        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983/solr'")
+      )
+    cmd("copycollection") action { (_, c) =>
+      c.copy(mode = "copycollection") } text("(EXPERIMENTAL) Copies one collection into another. The collection you're copying into MUST pre-exist in the cluster referenced with -z, be empty, and have the same number of slices. The replicationFactor can be different.") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy INTO"),
+      opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection to copy FROM"),
+      opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster you're copying FROM. Default: The same cluster you're copying INTO. (-z)"),
+      opt[Unit]("skipCheck") optional() action { (_, c) => { c.copy(confirmOp = false) } } text("Skip the DocCount check after copy. Use if the collection you're copying from is taking updates.")
       )
     cmd("waitactive") action { (_, c) =>
       c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster") children(
@@ -168,13 +179,13 @@ object CLI extends App with ManagerSupport {
     // argument error, the parser should have already informed the user
   })({
     config =>
-      implicit var possibleClusterManager: Option[ClusterManager] = None // defer until we're protected from exceptions
+      implicit var clusterManagers: mutable.Set[ClusterManager] = mutable.Set.empty
       ManagerConsoleLogging.setLevel(config.outputLevel)
       var success = false
 
       try {
         val clusterManager = ClusterManager(config.zk)
-        possibleClusterManager = Some(clusterManager)     // stash for later shutdown
+        clusterManagers += clusterManager     // stash for later shutdown
         val startState = clusterManager.currentState
 
         // get the requested operation
@@ -254,7 +265,8 @@ object CLI extends App with ManagerSupport {
           case "createcollection" => {
 
             // CreateCollection checks for this, but might as well check this before we get started too
-            if (!CreateCollection.configExists(clusterManager, config.configName)) {
+            if (!clusterManager.configExists(config.configName)) {
+              comment.warn(s"The specified config '${config.configName}' couldn't be found in ZK. Known configs are: ${clusterManager.configs.mkString(", ")}")
               exit(1)
             }
 
@@ -270,12 +282,22 @@ object CLI extends App with ManagerSupport {
             )))
           }
           case "copy" => {
+            comment.warn("'copy' is deprecated, use 'copycollection' instead")
+
             if (!Conditions.collectionExists(config.collection)(clusterManager.currentState)) {
               comment.warn(s"Can't copy into non-existent target collection ${config.collection}")
               exit(1)
             }
 
             Operations.deployFromAnotherCluster(clusterManager, config.collection, config.alternateHost)
+          }
+          case "copycollection" => {
+            val fromClusterManager =
+              if (config.altClusterRef.isEmpty) clusterManager
+              else ClusterManager(config.altClusterRef)
+            clusterManagers += fromClusterManager // register for shutdown
+
+            Operations.copyCollection(clusterManager, config.collection, fromClusterManager, config.fromCollection, config.confirmOp)
           }
           case "waitactive" => {
             val nodeNames: List[String] =
@@ -325,7 +347,7 @@ object CLI extends App with ManagerSupport {
         }
 
         // get user confirmation, if necessary
-        if (config.confirm && operation.nonEmpty) {
+        if (config.prompt && operation.nonEmpty) {
           comment.warn(operation.prettyPrint)
           val input = scala.io.StdIn.readLine("Seem reasonable? [y]> ")
           if (input.toLowerCase.contains("n")) {
@@ -343,15 +365,15 @@ object CLI extends App with ManagerSupport {
 
       if (!success) exit(1)
       comment.info("SUCCESS")
-      possibleClusterManager.foreach(_.shutdown())
+      clusterManagers.foreach(_.shutdown())
   })
 
   /**
    * sys.addShutdownHook doesn't work reliably when running in SBT, so kludge something else to handle clean client shutdown
    * @param status Command-line result code (so 0 is success, anything else is a failure)
    */
-  def exit(status: Int)(implicit possibleClusterManager: Option[ClusterManager]): Unit = {
-    possibleClusterManager.foreach(_.shutdown())
+  def exit(status: Int)(implicit clusterManagers: mutable.Set[ClusterManager]): Unit = {
+    clusterManagers.foreach(_.shutdown())
     comment.info(if (status == 0) "SUCCESS" else "FAILURE")
     sys.exit(status)
   }

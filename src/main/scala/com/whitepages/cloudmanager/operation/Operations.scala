@@ -8,7 +8,7 @@ import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.cloud.Replica
 import scala.annotation.tailrec
-import com.whitepages.cloudmanager.ManagerSupport
+import com.whitepages.cloudmanager.{OperationsException, ManagerException, ManagerSupport}
 
 object Operations extends ManagerSupport {
 
@@ -187,11 +187,58 @@ object Operations extends ManagerSupport {
       val (leader, copies) = replicas.partition(_.leader)
       Operation(
         leader.flatMap( (r) =>
-          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, r.host, ""))
+          FetchIndex(firstCore(r.core), r.core, deployFrom) +: copies.map( (c) => FetchIndex(r.core, c.core, r.url))
         )
       )
     }
     operations.fold(Operation.empty)(_ ++ _)
+  }
+
+  def copyCollection(targetClusterManager: ClusterManager, targetCollection: String,
+                     fromClusterManager: ClusterManager, fromCollection: String,
+                     confirm: Boolean = true): Operation = {
+    val targetState = targetClusterManager.currentState
+    val fromState = fromClusterManager.currentState
+    val targetLeaders = targetState.liveReplicasFor(targetCollection).filter(_.leader).sortBy(_.sliceName)
+    val fromLeaders = fromState.liveReplicasFor(fromCollection).filter(_.leader).sortBy(_.sliceName)
+
+    if (!targetState.collections.contains(targetCollection))
+      throw new OperationsException(targetCollection + " could not be found in the cluster at " + targetClusterManager.client.getZkHost)
+    if (!fromState.collections.contains(fromCollection))
+      throw new OperationsException(fromCollection + " could not be found in the cluster at " + fromClusterManager.client.getZkHost)
+
+    if(targetLeaders.size != fromLeaders.size) {
+      val errMsg =
+        s"Target collection $targetCollection has ${targetLeaders.size} shards, " +
+        s"but the collection you're copying from ($fromCollection) has ${fromLeaders.size} shards! " +
+        s"The shard count and hashing strategy MUST match to copy a collection."
+      throw new OperationsException(errMsg)
+    }
+
+    val replicaPairs = targetLeaders zip fromLeaders
+
+    if (replicaPairs.exists( pair => pair._1.sliceName != pair._2.sliceName)) {
+      comment.warn("Slice names don't match! Lexical sorting will be used for the slice mapping between the collections, so inspect the following carefully.")
+      val pairFormat = s"%-20s => %-20s"
+      comment.warn(pairFormat.format(fromCollection, targetCollection))
+      replicaPairs.foreach{ case (a, b) =>
+        comment.warn(pairFormat.format(a.sliceName, b.sliceName))
+      }
+    }
+
+    if (targetState.collectionInfo.configName(targetCollection) != fromState.collectionInfo.configName(fromCollection)) {
+      comment.warn("Warning, configset name doesn't match for the two collections.")
+    }
+
+    // TODO: Insure target is empty?
+
+
+    val actionList = for ( (fetchInto, fetchFrom) <- replicaPairs ) yield {
+      val replicas = targetState.replicasFor(fetchInto.collection, fetchInto.sliceName).filterNot(_ == fetchInto)
+      FetchIndex(fetchFrom.core, fetchInto.core, fetchFrom.url, confirm) +: replicas.map( r => FetchIndex(fetchInto.core, r.core, fetchInto.url, confirm))
+    }
+    Operation(actionList.flatten)
+
   }
 
   /**
