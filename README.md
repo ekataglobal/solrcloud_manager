@@ -175,7 +175,7 @@ the config doesn't exist. This leaves you with cores that can't initialize, whic
 changed after CREATECOLLECTION. As a result, this tool ignores maxShardsPerNode completely, aside from CREATECOLLECTION.
 1. (w) SOLR-5970 - Some collections api requests return status of 0 in the responseHeader, despite a failure. 
 (CREATECOLLECTION in non-async, maybe others)
-1. (w) If you DELETEREPLICA the **last** replica for a given shard, you get an error like 
+1. (w) SOLR-8257 - If you DELETEREPLICA the **last** replica for a given shard, you get an error like 
    "Invalid shard name : shard2 in collection : collection1", but the replica **is** actually removed from the clusterstate,
    leaving you with a broken collection
 1. You can have two replicas of the same slice on the same node (This tool provides some additional protection around the ADDREPLICA 
