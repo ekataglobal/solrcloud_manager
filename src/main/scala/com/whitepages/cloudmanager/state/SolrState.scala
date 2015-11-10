@@ -1,6 +1,7 @@
 package com.whitepages.cloudmanager.state
 
 import org.apache.solr.common.cloud.{ZkStateReader, ClusterState, Replica, Slice}
+import scala.util.Try
 import scala.util.matching.Regex
 import scala.collection.JavaConverters._
 import java.net.InetAddress
@@ -9,12 +10,13 @@ import com.whitepages.cloudmanager.{ManagerSupport, ManagerException}
 object SolrReplica {
   def hostName(nodeName: String) = {
     val chunks = nodeName.split(':')
-    InetAddress.getByName(chunks.head).getCanonicalHostName + ":" + chunks.tail.mkString("").replace('_','/')
+    Try(InetAddress.getByName(chunks.head).getCanonicalHostName + ":" + chunks.tail.mkString("").replace('_','/'))
+      .getOrElse(nodeName.replace('_', '/'))
   }
 }
 case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive: Boolean) {
   import SolrReplica._
-  lazy val leader = slice.getLeader.toString == replica.toString // TODO: Why aren't these the same object in some collections?
+  lazy val leader = Option(slice.getLeader).getOrElse("").toString == replica.toString // TODO: Why aren't these the same object in some collections?
   lazy val activeSlice = slice.getState == Slice.State.ACTIVE
   lazy val activeReplica = replica.getState == Replica.State.ACTIVE && alive
   lazy val active = activeSlice && activeReplica
