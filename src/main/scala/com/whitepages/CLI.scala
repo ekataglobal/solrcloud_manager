@@ -1,6 +1,7 @@
 package com.whitepages
 
 import java.net.InetAddress
+import java.nio.file.{Paths, Path}
 
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.operation.{Operations, Operation}
@@ -51,7 +52,8 @@ object CLI extends App with ManagerSupport {
                         restoreCollection: Option[String] = None,
                         fromCollection: String = "",
                         altClusterRef: String = "",
-                        confirmOp: Boolean = true
+                        confirmOp: Boolean = true,
+                        localPath: Path = Paths.get("")
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     help("help")text("print this usage text")
@@ -167,7 +169,20 @@ object CLI extends App with ManagerSupport {
       opt[String]("restoreFrom") optional() action { (x, c) => { c.copy(restoreCollection = Some(x)) } } text("Restore this collection name's index data. (used if a different collection name made the backup)"),
       opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica restore succeeds")
       )
-
+    cmd("upconfig") action { (_, c) =>
+      c.copy(mode = "upconfig") } text("Upload a configset to ZK") children(
+      opt[String]("dir") required() action { (x, c) => { c.copy(localPath = Paths.get(x)) } } text("The local directory containing the config files"),
+      opt[String]("config") optional() action { (x, c) => { c.copy(configName = x) } } text("The name of the configset. Default: The name of the directory")
+      )
+    cmd("downconfig") action { (_, c) =>
+      c.copy(mode = "downconfig") } text("Download a configset to ZK") children(
+      opt[String]("dir") required() action { (x, c) => { c.copy(localPath = Paths.get(x)) } } text("The local directory containing the config files"),
+      opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the configset")
+      )
+    cmd("rmconfig") action { (_, c) =>
+      c.copy(mode = "rmconfig") } text("Delete a configset to ZK") children(
+      opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the configset to delete")
+      )
     checkConfig{
       c =>
         if (c.zk.isEmpty) failure("provide a zookeeper connection string, with port and (optional) chroot")
@@ -194,6 +209,7 @@ object CLI extends App with ManagerSupport {
             clusterManager.printClusterVersion()
             clusterManager.printOverseer()
             clusterManager.printAliases()
+            clusterManager.printConfigs()
             startState.printReplicas()
             Operation.empty
           }
@@ -343,6 +359,18 @@ object CLI extends App with ManagerSupport {
           }
           case "restoreindex" => {
             Operations.restoreCollection(clusterManager, config.collection, config.backupDir, config.restoreCollection)
+          }
+          case "upconfig" => {
+            val configName =
+              if (config.configName.isEmpty) config.localPath.toAbsolutePath.getFileName().toString
+              else config.configName
+            Operation(List(UploadConfig(config.localPath, configName)))
+          }
+          case "downconfig" => {
+            Operation(List(DownloadConfig(config.localPath, config.configName)))
+          }
+          case "rmconfig" => {
+            Operation(List(DeleteConfig(config.configName)))
           }
         }
 

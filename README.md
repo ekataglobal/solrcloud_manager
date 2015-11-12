@@ -148,6 +148,18 @@ This gets you an index without impacting current nodes.
 "populate" at this point will replicate the slices on that single node across the rest of your cluster, and 
 optionally clean up by wiping the shards from the index node so you can cleanly remove it from the cluster again.
 
+Config commands
+===============
+
+**upconfig** 
+Uploads a given local configset directory to ZK.
+
+**downconfig**
+Copies a given configset in ZK to a local directory.
+
+**rmconfig**
+Deletes a given configset from ZK if it not referenced by any collection.
+
     
 TODO:
 =====
