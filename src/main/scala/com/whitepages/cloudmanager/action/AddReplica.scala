@@ -1,6 +1,7 @@
 package com.whitepages.cloudmanager.action
 
-import com.whitepages.cloudmanager.client.SolrRequestHelpers
+import com.whitepages.cloudmanager.ManagerException
+import com.whitepages.cloudmanager.client.{SolrCloudVersion, SolrRequestHelpers}
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
@@ -17,8 +18,10 @@ case class AddReplica(collection: String, slice: String, copyTo: String, waitUnt
   )
 
   override def execute(clusterManager: ClusterManager): Boolean = {
-    comment.info(s"Issuing command for ${this.name}: Collection: $collection, Slice: $slice, copying onto: $copyTo")
+    if (clusterManager.clusterVersion < SolrCloudVersion(4,8))
+      throw new ManagerException("AddReplica is not supported before Solr 4.8, this cluster is " + clusterManager.clusterVersion)
 
+    comment.info(s"Issuing command for ${this.name}: Collection: $collection, Slice: $slice, copying onto: $copyTo")
     val params = new ModifiableSolrParams
     params.set("action", CollectionAction.ADDREPLICA.toString)
     params.set("collection", collection)
