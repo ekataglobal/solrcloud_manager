@@ -36,7 +36,7 @@ object CLI extends App with ManagerSupport {
                         node2: String = "",
                         safetyFactor: Int = 1,
                         alias: String = "",
-                        numSlices: Int = 0,
+                        numSlices: Int = 1,
                         configName: String = "",
                         maxShardsPerNode: Option[Int] = None,
                         replicationFactor: Option[Int] = None,
@@ -56,119 +56,125 @@ object CLI extends App with ManagerSupport {
                         localPath: Path = Paths.get("")
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
+    note("The following options are available for all commands")
     help("help")text("print this usage text")
-    opt[String]('z', "zk") required() action { (x, c) => { c.copy(zk = x) } } text("Zookeeper connection string, including any chroot path")
+    opt[String]('z', "zk") required() action { (x, c) => { c.copy(zk = x) } } text("Zookeeper connection string, including any chroot path. *Required for all commands.*")
     opt[Unit]("confirm") optional() action { (_, c) =>
       c.copy(prompt = false) } text("Assume the operation is confirmed, don't prompt")
     opt[Unit]('d', "debug") optional() action { (_, c) =>
       c.copy(outputLevel = Level.DEBUG) } text("debug output")
     opt[Unit]('q', "quiet") optional() action { (_, c) =>
       c.copy(outputLevel = Level.WARN) } text("less output")
+    note("\n------View commands-----\n")
     cmd("clusterstatus") action { (_, c) =>
-      c.copy(mode = "clusterstatus") } text("Print current cluster status")
+      c.copy(mode = "clusterstatus") } text("Print current cluster status. This is the default command.")
+    cmd("waitactive") action { (_, c) =>
+      c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster. Useful for preventing other things until a node is ready.") children(
+      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of one or more (comma-delinated) nodes that should be active. Default: localhost."),
+      opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite."),
+      opt[Unit]("strict") optional() action { (_, c) => { c.copy(strict = true) } } text("Whether to fail if any node names couldn't be found. Default false.")
+      )
+    note("\n------Collections API------\n")
+    cmd("createcollection") action { (_, c) =>
+      c.copy(mode = "createcollection") } text("Creates the specified collection") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to create"),
+      opt[Int]("slices") optional() action { (x, c) => { c.copy(numSlices = x) } } text("The desired number of slices. Default 1"),
+      opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the config to use for this collection"),
+      opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("When auto-assigning slices, don't allow more than this per node. Default 1"),
+      opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("The desired number of replicas (1-based, default 1)"),
+      opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. Default: all"),
+      opt[Unit]("async") optional() action { (_, c) =>
+        c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts. Default: false")
+      )
+    cmd("deletecollection") action { (_, c) =>
+      c.copy(mode = "deletecollection") } text("Deletes the specified collection") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to delete")
+      )
+    cmd("addreplica") action { (_, c) =>
+      c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to add the replica for"),
+      opt[String]("slice") required() action { (x, c) => { c.copy(slice = x) } } text("The name of the slice to add the replica for"),
+      opt[String]("node") required() action { (x, c) => { c.copy(node = x) } } text("The node the replica should be added to")
+      )
+    cmd("deletereplica") action { (_, c) =>
+      c.copy(mode = "deletereplica") } text("delete a specific replica") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection of the replica"),
+      opt[String]("slice") required() action { (x, c) => { c.copy(slice = x) } } text("The slice name of the replica, ie 'shard1'"),
+      opt[String]("node") required() action { (x, c) => { c.copy(node = x) } } text("The node the replica resides on"),
+      opt[Int]("safetyFactor") optional() action { (x, c) => { c.copy(safetyFactor = x) } } text("Fail if this action would result in fewer total replicas than this. Default 1.")
+      )
+    cmd("alias") action { (_, c) =>
+      c.copy(mode = "alias") } text("Create an alias, or move the pointer if it already exists") children(
+      opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the desired alias"),
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("Comma-delinated collection names for this alias to point to")
+      )
+    cmd("deletealias") action { (_, c) =>
+      c.copy(mode = "deletealias") } text("Delete an existing alias") children(
+      opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the alias to delete")
+      )
+    note("\n------Cluster manipulation------\n")
     cmd("clean") action { (_, c) =>
-      c.copy(mode = "clean") } text("Remove all replicas from given (comma-delinated) nodes") children(
-        opt[String]('c', "collection") optional() action { (x, c) => { c.copy(collection = x) } } text("Limit removals to this collection"),
+      c.copy(mode = "clean") } text("Remove all replicas from the given (comma-delinated) nodes") children(
+        opt[String]('c', "collection") optional() action { (x, c) => { c.copy(collection = x) } } text("Limit removals to this collection. Default: all collections"),
         opt[String]("nodes") required() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to remove replicas from"),
         opt[Int]("safetyFactor") optional() action { (x, c) => { c.copy(safetyFactor = x) } } text("Fail any delete that would result in fewer total replicas than this. Default 1.")
+      )
+    cmd("cleancollection") action { (_, c) =>
+      c.copy(mode = "cleancollection") } text("Remove any non-active replicas from the cluster. (Warning: Including those in RECOVERING)") children(
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to clean")
       )
     cmd("clone") action { (_, c) =>
       c.copy(mode = "clone") } text("Adds all replicas on a given node to another node") children(
         opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
         opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto"),
-        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas at once, instead of one-at-a-time.")
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas at once, instead of one-at-a-time. Default: false")
       )
     cmd("migratenode") action { (_, c) =>
       c.copy(mode = "migrate") } text("Adds all replicas on a given node to another node, then removes those replicas from the original node") children(
-        opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
-        opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto")
-      )
-    cmd("populate") action { (_, c) =>
-      c.copy(mode = "populate") } text("(EXPERIMENTAL) populate a cluster from a given node, presumed to be an indexer") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to populate across the cluster"),
-        opt[Int]("slicesPerNode") required() action { (x, c) => { c.copy(slicesPerNode = x) } } text("The desired number of slices on each node"),
-        opt[Unit]("wipe") optional() action { (_, c) =>
-          c.copy(wipe = true) } text("Wipe the originating node after we're done populating the cluster from it")
-      )
-    cmd("fill") action { (_, c) =>
-      c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
-        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. (Default all)"),
-        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas at once, instead of one-at-a-time.")
-      )
-    cmd("addreplica") action { (_, c) =>
-      c.copy(mode = "addreplica") } text("Uses available/unused nodes to add more replicas") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to add the replica for"),
-        opt[String]("slice") required() action { (x, c) => { c.copy(slice = x) } } text("The name of the slice to add the replica for"),
-        opt[String]("node") required() action { (x, c) => { c.copy(node = x) } } text("The node the replica should be added to")
-      )
-    cmd("deletereplica") action { (_, c) =>
-      c.copy(mode = "deletereplica") } text("delete a specific replica") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection of the replica"),
-        opt[String]("slice") required() action { (x, c) => { c.copy(slice = x) } } text("The slice name of the replica"),
-        opt[String]("node") required() action { (x, c) => { c.copy(node = x) } } text("The node the replica resides on"),
-        opt[Int]("safetyFactor") optional() action { (x, c) => { c.copy(safetyFactor = x) } } text("Fail if this action would result in fewer total replicas than this. Default 1.")
-      )
-    cmd("alias") action { (_, c) =>
-      c.copy(mode = "alias") } text("Create an alias, or move the pointer if it already exists") children(
-        opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the desired alias"),
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("Comma-delinated collection names for this alias to point to")
-      )
-    cmd("deletealias") action { (_, c) =>
-      c.copy(mode = "deletealias") } text("Create an alias, or move the pointer if it already exists") children(
-        opt[String]('a', "alias") required() action { (x, c) => { c.copy(alias = x) } } text("The name of the alias to delete")
-      )
-    cmd("cleancollection") action { (_, c) =>
-      c.copy(mode = "cleancollection") } text("Remove any non-active replicas from the clusterstate") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to clean")
-      )
-    cmd("deletecollection") action { (_, c) =>
-      c.copy(mode = "deletecollection") } text("Deletes the specified collection") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to delete")
-      )
-    cmd("createcollection") action { (_, c) =>
-      c.copy(mode = "createcollection") } text("Creates the specified collection") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to create"),
-        opt[Int]("slices") required() action { (x, c) => { c.copy(numSlices = x) } } text("The desired number of slices"),
-        opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the config to use for this collection"),
-        opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("When auto-assigning slices, don't allow more than this per node. Default 1"),
-        opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("The desired number of replicas (1-based, default 1)"),
-        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this collection to. (Default all)"),
-        opt[Unit]("async") optional() action { (_, c) =>
-          c.copy(asyncOps = true) } text("Submit the creation request as an async job. This hides error messages, but protects against timeouts.")
+      opt[String]("from") required() action { (x, c) => { c.copy(node = x) } } text("Node to clone"),
+      opt[String]("onto") required() action { (x, c) => { c.copy(node2 = x) } } text("Node to clone onto")
       )
     cmd("copy") action { (_, c) =>
       c.copy(mode = "copy") } text("(DEPRECATED) Use 'copycollection' instead") children(
-        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
-        opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983/solr'")
+      opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy"),
+      opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983/solr'")
       )
     cmd("copycollection") action { (_, c) =>
       c.copy(mode = "copycollection") } text("(EXPERIMENTAL) Copies one collection into another. The collection you're copying into MUST pre-exist in the cluster referenced with -z, be empty, and have the same number of slices. The replicationFactor can be different.") children(
       opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy INTO"),
       opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection to copy FROM"),
       opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster you're copying FROM. Default: The same cluster you're copying INTO. (-z)"),
-      opt[Unit]("skipCheck") optional() action { (_, c) => { c.copy(confirmOp = false) } } text("Skip the DocCount check after copy. Use if the collection you're copying from is taking updates.")
+      opt[Unit]("skipCheck") optional() action { (_, c) => { c.copy(confirmOp = false) } } text("Skip the DocCount check after copy. Use if the collection you're copying from is taking updates. Default: false")
       )
-    cmd("waitactive") action { (_, c) =>
-      c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster") children(
-      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of one or more (comma-delinated) nodes that should be active. Default localhost."),
-      opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite."),
-      opt[Unit]("strict") optional() action { (_, c) => { c.copy(strict = true) } } text("Whether to fail if any node names couldn't be found. Default false.")
+    cmd("populate") action { (_, c) =>
+      c.copy(mode = "populate") } text("(EXPERIMENTAL) populate a cluster from a given node, presumed to be an indexer") children(
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The collection to populate across the cluster"),
+        opt[Int]("slicesPerNode") required() action { (x, c) => { c.copy(slicesPerNode = x) } } text("The desired number of slices on each node"),
+        opt[Unit]("wipe") optional() action { (_, c) =>
+          c.copy(wipe = true) } text("Wipe the originating node after we're done populating the cluster from it. Default: false")
       )
+    cmd("fill") action { (_, c) =>
+      c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
+        opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
+        opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. Default: all"),
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false")
+      )
+    note("\n-----Backup commands-----\n")
     cmd("backupindex") action { (_, c) =>
       c.copy(mode = "backupindex") } text("Triggers a backup request for a given collection") children(
       opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to back up"),
       opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on each node to put the backup in. The collection and slice names will be appended. Typically a shared filesystem across all nodes."),
       opt[Int]("keep") optional() action { (x, c) => { c.copy(backupLimit = x) } } text("The number of backups for a given node/core to keep. Default 2."),
-      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica backup succeeds")
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica backup succeeds. Default: false")
       )
     cmd("restoreindex") action { (_, c) =>
       c.copy(mode = "restoreindex") } text("Loads a backup into an existing collection") children(
       opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to restore into"),
       opt[String]("dir") required() action { (x, c) => { c.copy(backupDir = x) } } text("The base directory on the nodes where the backup index data is saved. Typically a shared filesystem across all nodes."),
-      opt[String]("restoreFrom") optional() action { (x, c) => { c.copy(restoreCollection = Some(x)) } } text("Restore this collection name's index data. (used if a different collection name made the backup)"),
-      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica restore succeeds")
+      opt[String]("restoreFrom") optional() action { (x, c) => { c.copy(restoreCollection = Some(x)) } } text("Restore this collection name's index data. Default: the name of the collection (-c)"),
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Don't wait to confirm each replica restore succeeds. Default: false")
       )
+    note("\n------Config commands------\n")
     cmd("upconfig") action { (_, c) =>
       c.copy(mode = "upconfig") } text("Upload a configset to ZK") children(
       opt[String]("dir") required() action { (x, c) => { c.copy(localPath = Paths.get(x)) } } text("The local directory containing the config files"),
@@ -180,7 +186,7 @@ object CLI extends App with ManagerSupport {
       opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the configset")
       )
     cmd("rmconfig") action { (_, c) =>
-      c.copy(mode = "rmconfig") } text("Delete a configset to ZK") children(
+      c.copy(mode = "rmconfig") } text("Delete a configset from ZK") children(
       opt[String]("config") required() action { (x, c) => { c.copy(configName = x) } } text("The name of the configset to delete")
       )
     checkConfig{

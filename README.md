@@ -84,7 +84,7 @@ if possible, and will select nodes from incomplete specifications if a distinct 
 
 
 Cluster commands:
------------------
+=================
 
 A lot of the work in large Solrcloud cluster management isn't so much figuring out the right API command, 
 as figuring out the correct **set** of API commands. See the help output for a complete list, but the following 
@@ -164,8 +164,7 @@ Deletes a given configset from ZK if it not referenced by any collection.
 TODO:
 =====
 
-* Pretty-print operation output
-* More consistent exception responses and handling (Use ManagerException more)
+* More consistent exception responses and handling (Use ManagerException more, better error messaging)
 * Cross version support (where possible)
 * Better introspection of solr responses
 * Insure paths other than /solr work

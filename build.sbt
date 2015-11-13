@@ -30,5 +30,5 @@ libraryDependencies ++= Seq(
   "org.slf4j"            % "slf4j-log4j12"        % "1.7.7",
   "log4j"                % "log4j"                % "1.2.17",
   "org.apache.solr"      %  "solr-solrj"          % "5.2.1",
-  "com.github.scopt"     %% "scopt"               % "3.2.0"
+  "com.github.scopt"     %% "scopt"               % "3.3.0"
 )
