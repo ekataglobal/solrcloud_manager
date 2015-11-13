@@ -128,15 +128,18 @@ For a given collection, restore a backup created by this tool into that collecti
 was created by this tool, and that the directory was a shared filesystem.
     
 **copycollection**: (Experimental)
-Provides a method for copying collection index data into another collection, even **across solrcloud clusters** 
+Provides a method for copying collection index data into another collection, even **across solrcloud clusters**! 
 Some caveats: 
     
 1. Both collections MUST already exist.
-1. The collections MUST have the same number of slices. Hashing MUST be identical, and there's 
-no check for this!
+1. Both collections should use the same config data. Some differences can be tolerated, using similar heuristics
+ to those if you were modifying an existing collection.
+1. The collections MUST have the same number of slices, and hashing MUST be identical. 
+The replication factor can be different.
 1. The collection you're copying into should be empty - if it isn't, solr may silently decide a slice is
 newer than the data you're trying to copy, and fail to do so.
-1. Don't forget to hard-commit on the cluster you're copying from before you start
+1. If copying across clusters, the cluster you're copying INTO must be able to make requests to the cluster you're 
+copying FROM.
 
 **populate**: (Experimental)
 Support for a bulk-deployment strategy for a collection. 
@@ -198,6 +201,52 @@ Development:
 
 Requires Scala & SBT. Installing sbt-extras will handle getting and managing these for you: https://github.com/paulp/sbt-extras
 
+Tool integration
+-----------------
+
+Although the primary interface is the command line, the command line is mostly just there to provide setup for 
+library code. This means all commands can be integrated into other java/scala applications as well.
+Build the jar, and include it in your project. Then write some code like:
+
+    // Scala...
+    
+    // Create a cluster manager
+    val clusterManager = ClusterManager(zkStr)
+    
+    // set up some Actions you want to do
+    val addReplicaAction = AddReplica(collection, slice, node)
+    val deleteReplicaAction = DeleteReplica(collection, slice, node2)
+    // wrap them in an Operation
+    val operation = Operation(List(addReplicaAction, deleteReplicaAction))
+    // execute that Operation against your cluster
+    operation.execute(clusterManager)
+    
+    // or use one of the Operations static methods to build you an Operation.
+    val fillOp = Operations.fillCluster(clusterManager, collection)
+    fillOp.execute(clusterManager)
+    
+    // Java...  
+    // (Note: There hasn't been any focus on java interop. If you want/use this, please say so)
+    
+    // Create a cluster manager
+    ClusterManager clusterManager = new ClusterManager(zkStr);
+    
+    // set up some Actions you want to do
+    AddReplica addReplicaAction = new AddReplica(collection, slice, node);
+    DeleteReplica deleteReplicaAction = new DeleteReplica(collection, slice, node2);
+    // wrap them in an Operation
+    ArrayList lst = new ArrayList<Action>(2);
+    lst.add(addReplicaAction);
+    lst.add(deleteReplicaAction);
+    Operation operation = new Operation(lst);
+    // execute that Operation against your cluster
+    operation.execute(clusterManager);
+    
+    // or use one of the Operations static methods to build you an Operation.
+    Operation fillOp = Operations.fillCluster(clusterManager, collection);
+    fillOp.execute(clusterManager);
+    
+
 IntelliJ Issues
 ---------------
 
@@ -221,3 +270,4 @@ This runs the test suite:
 The test suite is built on top of the JUnit framework provided by Solr itself. 
 Unfortunately, this is very spammy output, and the bridge between JUnit and sbt causes some strangeness, 
 including odd test count output.
+

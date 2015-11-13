@@ -56,6 +56,8 @@ object Operations extends ManagerSupport {
    *
    * @param clusterManager
    * @param collection
+   * @param nodesOpt
+   * @param waitForReplication
    * @return The corresponding Operation
    */
   def fillCluster(clusterManager: ClusterManager, collection: String, nodesOpt: Option[Seq[String]] = None, waitForReplication: Boolean = true): Operation = {
