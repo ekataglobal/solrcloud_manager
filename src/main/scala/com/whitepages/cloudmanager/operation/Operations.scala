@@ -1,5 +1,6 @@
 package com.whitepages.cloudmanager.operation
 
+import java.io.File
 import java.nio.file.{Paths, Files, Path}
 import java.util
 
@@ -9,6 +10,7 @@ import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.cloud.Replica
 import scala.annotation.tailrec
 import com.whitepages.cloudmanager.{OperationsException, ManagerException, ManagerSupport}
+import scala.collection.JavaConverters._
 
 object Operations extends ManagerSupport {
 
@@ -241,6 +243,70 @@ object Operations extends ManagerSupport {
     }
     Operation(actionList.flatten)
 
+  }
+
+  case class CloneCollectionOverrides(
+                                       configName: Option[String] = None,
+                                       maxSlicesPerNode: Option[Int] = None,
+                                       replicationFactor: Option[Int] = None,
+                                       createNodeSet: Option[Seq[String]] = None
+                                     )
+  def cloneCollection(targetClusterManager: ClusterManager, targetCollection: String,
+                      fromClusterManager: ClusterManager, fromCollection: String,
+                      overrides: CloneCollectionOverrides = CloneCollectionOverrides()): Operation = {
+
+    def deleteOnExit(dir: Path): Unit = {
+      Runtime.getRuntime.addShutdownHook(new Thread() {
+        override def run() = recurseDelete(dir.toFile)
+        def recurseDelete(file: File): Unit = {
+          if (file.isDirectory) {
+            file.listFiles().toList.foreach(recurseDelete)
+            file.delete()
+          }
+          else
+            file.delete()
+        }
+      })
+    }
+
+    val targetState = targetClusterManager.currentState
+    val fromState = fromClusterManager.currentState
+    val fromConfigName = overrides.configName.getOrElse(fromState.collectionInfo.configName(fromCollection))
+    val fromReplicas = fromState.replicasFor(fromCollection)
+    val fromSliceCount = fromReplicas.map(_.sliceName).distinct.size
+    val fromMaxSlicesPerNode = overrides.maxSlicesPerNode.getOrElse(fromReplicas.groupBy(_.node).map(_._2.size).max)
+    val fromReplicationFactor = overrides.replicationFactor.getOrElse(fromReplicas.groupBy(_.sliceName).map(_._2.size).max)
+
+    val copyConfigOp: Operation =
+      (targetState.configs.contains(fromConfigName), fromState.configs.contains(fromConfigName)) match {
+        case (false, true) =>
+          val tmpDir = Files.createTempDirectory("solrcloud_manager_config")
+          deleteOnExit(tmpDir) // at least try to clean up afterwards
+          Operation(Seq(
+            AltClusterAction(DownloadConfig(tmpDir, fromConfigName), fromClusterManager),
+            UploadConfig(tmpDir, fromConfigName)
+          ))
+        case (true, _) =>
+          // TODO: Actually verify contents
+          if (targetClusterManager != fromClusterManager)
+            comment.warn(s"Config $fromConfigName already exists in the target cluster, assuming the contents are the same.")
+          Operation.empty
+        case (false, false) =>
+          throw new OperationsException(s"Could not find a config named $fromConfigName")
+      }
+
+    val createCollectionOp = Operation(
+      CreateCollection(
+        targetCollection,
+        fromSliceCount,
+        fromConfigName,
+        Some(fromMaxSlicesPerNode),
+        Some(fromReplicationFactor),
+        overrides.createNodeSet
+      )
+    )
+
+    copyConfigOp ++ createCollectionOp
   }
 
   /**

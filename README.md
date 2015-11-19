@@ -127,7 +127,7 @@ filesystem (ie, NFS) and specifying that as the backup directory would work.
 For a given collection, restore a backup created by this tool into that collection. Assumes the backup
 was created by this tool, and that the directory was a shared filesystem.
     
-**copycollection**: (Experimental)
+**copycollection**:
 Provides a method for copying collection index data into another collection, even **across solrcloud clusters**! 
 Some caveats: 
     
@@ -140,6 +140,12 @@ The replication factor can be different.
 newer than the data you're trying to copy, and fail to do so.
 1. If copying across clusters, the cluster you're copying INTO must be able to make requests to the cluster you're 
 copying FROM.
+
+**clonecollection**
+Creates a new (empty) collection using another collection as a template for the various settings. 
+The cloned collection may be in another solrcloud cluster completely. If the named configset
+for the template collection does not also exist in the target cluster, it will be copied over first.
+The resulting collection from this command is a suitable target for a copycollection command.
 
 **populate**: (Experimental)
 Support for a bulk-deployment strategy for a collection. 

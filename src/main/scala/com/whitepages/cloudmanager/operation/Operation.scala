@@ -2,7 +2,7 @@ package com.whitepages.cloudmanager.operation
 
 
 import org.apache.solr.client.solrj.impl.{CloudSolrClient}
-import com.whitepages.cloudmanager.action.Action
+import com.whitepages.cloudmanager.action.{StateCondition, Action}
 import com.whitepages.cloudmanager.state.ClusterManager
 import java.util.Calendar
 import com.whitepages.cloudmanager.ManagerSupport
@@ -11,6 +11,7 @@ import scala.collection.JavaConverters._
 
 object Operation {
   def empty = Operation(Seq())
+  def apply(action: Action): Operation = Operation(Seq(action))
 }
 case class Operation(actions: Seq[Action]) extends ManagerSupport {
   def this(actions: java.util.List[Action]) = this(actions.asScala)

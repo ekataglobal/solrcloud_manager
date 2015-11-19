@@ -3,6 +3,7 @@ package com.whitepages
 import java.net.InetAddress
 import java.nio.file.{Paths, Path}
 
+import com.whitepages.cloudmanager.operation.Operations.CloneCollectionOverrides
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.operation.{Operations, Operation}
 import com.whitepages.cloudmanager.action._
@@ -140,11 +141,21 @@ object CLI extends App with ManagerSupport {
       opt[String]("copyFrom") required() action { (x, c) => { c.copy(alternateHost = x) } } text("A reference to a host (any host) in the cluster to copy FROM, ie 'foo.QA.com:8983/solr'")
       )
     cmd("copycollection") action { (_, c) =>
-      c.copy(mode = "copycollection") } text("(EXPERIMENTAL) Copies one collection into another. The collection you're copying into MUST pre-exist in the cluster referenced with -z, be empty, and have the same number of slices. The replicationFactor can be different.") children(
+      c.copy(mode = "copycollection") } text("(EXPERIMENTAL) Copies one collection's index data into another. The collection you're copying into MUST pre-exist in the cluster referenced with -z, be empty, and have the same number of slices. The replicationFactor can be different.") children(
       opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to copy INTO"),
       opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection to copy FROM"),
       opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster you're copying FROM. Default: The same cluster you're copying INTO. (-z)"),
       opt[Unit]("skipCheck") optional() action { (_, c) => { c.copy(confirmOp = false) } } text("Skip the DocCount check after copy. Use if the collection you're copying from is taking updates. Default: false")
+      )
+    cmd("clonecollection") action { (_, c) =>
+      c.copy(mode = "clonecollection") } text("Creates a new empty collection using another collection (potentially in another cluster) as a template") children(
+      opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection to clone"),
+      opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster containing the collection you're cloning. Default: The same cluster you're cloning into. (-z)"),
+      opt[String]("collection") optional() action { (x, c) => { c.copy(collection = x) } } text("The name of the new collection. Default: the name of the cloned collection"),
+      opt[String]("config") optional() action { (x, c) => { c.copy(configName = x) } } text("A config name to use for this collection. Default: the config name from the cloned collection"),
+      opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("An number of shards per node. Default: the max shards per node of the cloned collection"),
+      opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("A replacement replication factor. Default: the replication factor of the cloned collection"),
+      opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this new collection to. Default: all")
       )
     cmd("populate") action { (_, c) =>
       c.copy(mode = "populate") } text("(EXPERIMENTAL) populate a cluster from a given node, presumed to be an indexer") children(
@@ -200,13 +211,12 @@ object CLI extends App with ManagerSupport {
     // argument error, the parser should have already informed the user
   })({
     config =>
-      implicit var clusterManagers: mutable.Set[ClusterManager] = mutable.Set.empty
+
       ManagerConsoleLogging.setLevel(config.outputLevel)
       var success = false
 
       try {
-        val clusterManager = ClusterManager(config.zk)
-        clusterManagers += clusterManager     // stash for later shutdown
+        val clusterManager = RegisteredClusterManagers.get(config.zk)
         val startState = clusterManager.currentState
 
         // get the requested operation
@@ -316,10 +326,26 @@ object CLI extends App with ManagerSupport {
           case "copycollection" => {
             val fromClusterManager =
               if (config.altClusterRef.isEmpty) clusterManager
-              else ClusterManager(config.altClusterRef)
-            clusterManagers += fromClusterManager // register for shutdown
+              else RegisteredClusterManagers.get(config.altClusterRef)
 
             Operations.copyCollection(clusterManager, config.collection, fromClusterManager, config.fromCollection, config.confirmOp)
+          }
+          case "clonecollection" => {
+            val overrides = CloneCollectionOverrides(
+              configName = if (config.configName.isEmpty) None else Some(config.configName),
+              maxSlicesPerNode = config.maxShardsPerNode,
+              replicationFactor = config.replicationFactor,
+              createNodeSet = config.nodeSet
+            )
+            val fromClusterManager =
+              if (config.altClusterRef.isEmpty) clusterManager
+              else RegisteredClusterManagers.get(config.altClusterRef)
+
+            Operations.cloneCollection(
+              clusterManager, if (config.collection.isEmpty) config.fromCollection else config.collection,
+              fromClusterManager, config.fromCollection,
+              overrides
+            )
           }
           case "waitactive" => {
             val nodeNames: List[String] =
@@ -399,15 +425,15 @@ object CLI extends App with ManagerSupport {
 
       if (!success) exit(1)
       comment.info("SUCCESS")
-      clusterManagers.foreach(_.shutdown())
+      RegisteredClusterManagers.shutdown()
   })
 
   /**
    * sys.addShutdownHook doesn't work reliably when running in SBT, so kludge something else to handle clean client shutdown
    * @param status Command-line result code (so 0 is success, anything else is a failure)
    */
-  def exit(status: Int)(implicit clusterManagers: mutable.Set[ClusterManager]): Unit = {
-    clusterManagers.foreach(_.shutdown())
+  def exit(status: Int): Unit = {
+    RegisteredClusterManagers.shutdown()
     comment.info(if (status == 0) "SUCCESS" else "FAILURE")
     sys.exit(status)
   }
@@ -423,6 +449,24 @@ object CLI extends App with ManagerSupport {
     e.getCause match {
       case null => e
       case e: Throwable => getRootCause(e)
+    }
+  }
+
+  object RegisteredClusterManagers {
+    private var clusterManagers: mutable.Set[ClusterManager] = mutable.Set.empty
+    def get(zk: String) = {
+      // Stored in a set, which prevents duplicate managers based on the same zk string,
+      // but I'd still rather not create a new manager just to throw it away as a dupe
+      val managerOpt = clusterManagers.find(_.client.getZkHost == zk)
+      managerOpt.getOrElse{
+        val c = ClusterManager(zk)
+        clusterManagers += c     // stash for later shutdown
+        c
+      }
+    }
+    def shutdown() {
+      clusterManagers.foreach(_.shutdown())
+      clusterManagers.clear()
     }
   }
 }
