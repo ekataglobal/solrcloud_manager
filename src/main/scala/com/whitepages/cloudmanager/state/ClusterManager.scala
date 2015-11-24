@@ -40,8 +40,9 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
 
   def currentState = {
     stateReader.updateClusterState(true)
-    SolrState(stateReader.getClusterState, CollectionInfo((c: String) => stateReader.readConfigName(c)), configs)
+    SolrState(stateReader.getClusterState, CollectionInfo(configForCollection), configs)
   }
+  def configForCollection(collection: String): String = stateReader.readConfigName(collection)
 
   def aliasMap: scala.collection.Map[String, String] = {
     stateReader.updateAliases()
@@ -51,7 +52,7 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
   def printAliases() {
     if (aliasMap.nonEmpty) {
       comment.info("Aliases:")
-      aliasMap.foreach { case (alias, collection) => comment.info(s"$alias\t->\t$collection")}
+      aliasMap.foreach { case (alias, collection) => comment.info(s"\t$alias\t->\t$collection")}
     }
   }
 
@@ -102,6 +103,12 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
   def configExists(configName: String) = configs.contains(configName)
   def printConfigs(): Unit = {
     comment.info("Config sets: " + configs.mkString(", "))
+    comment.info("Config usage: ")
+    val collections = currentState.collections
+    collections.foreach(coll => {
+      comment.info(s"\t$coll\t->\t " + configForCollection(coll) )
+    })
+    if (collections.isEmpty) comment.info("\t(no collections)")
   }
 
 
