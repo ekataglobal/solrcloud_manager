@@ -77,7 +77,7 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     (replicaName, node) <- extractReplicasMap(collection, sliceName).toSeq.sortBy(_._1)
   } yield SolrReplica(collection, slice, node, liveNodes.contains(node.getNodeName))
 
-  lazy val liveNodes = state.getLiveNodes.asScala
+  lazy val liveNodes = state.getLiveNodes.asScala.toSet
   lazy val downNodes =  allReplicas.map(_.node).filterNot(liveNodes.contains)
   lazy val allNodes = liveNodes ++ downNodes
   lazy val unusedNodes = allNodes.filterNot(allReplicas.map(_.node).contains)
