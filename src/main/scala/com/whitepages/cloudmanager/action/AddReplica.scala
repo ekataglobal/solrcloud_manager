@@ -6,7 +6,7 @@ import org.apache.solr.client.solrj.impl.CloudSolrServer
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 import scala.util.Try
-import com.whitepages.cloudmanager.state.ClusterManager
+import com.whitepages.cloudmanager.state.{SolrReplica, SolrState, ClusterManager}
 import scala.concurrent.duration._
 
 case class AddReplica(collection: String, slice: String, copyTo: String, waitUntilActive: Boolean = true, waitTimeoutSec: Int = -1) extends Action {
@@ -37,6 +37,6 @@ case class AddReplica(collection: String, slice: String, copyTo: String, waitUnt
   )
 
   override def toString = {
-    s"AddReplica: collection: $collection, slice: $slice, onto: $copyTo, waitUntilActive: $waitUntilActive, waitTimeout: $waitTimeoutSec"
+    s"AddReplica: collection: $collection, slice: $slice, onto: ${SolrReplica.hostName(copyTo)}, waitUntilActive: $waitUntilActive, waitTimeout: $waitTimeoutSec"
   }
 }

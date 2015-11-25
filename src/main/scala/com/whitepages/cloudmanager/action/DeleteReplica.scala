@@ -1,7 +1,7 @@
 package com.whitepages.cloudmanager.action
 
 import com.whitepages.cloudmanager.client.{SolrCloudVersion, SolrRequestHelpers}
-import com.whitepages.cloudmanager.state.{SolrState, ClusterManager}
+import com.whitepages.cloudmanager.state.{SolrReplica, SolrState, ClusterManager}
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 
@@ -48,5 +48,5 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
     StateCondition("replica no longer exists", Conditions.sliceIncludesNode(collection, slice, node).andThen(!_))
   )
 
-  override def toString = s"DeleteReplica: collection: $collection, slice: $slice, node: $node, safetyFactor: $safetyFactor"
+  override def toString = s"DeleteReplica: collection: $collection, slice: $slice, node: ${SolrReplica.hostName(node)}, safetyFactor: $safetyFactor"
 }

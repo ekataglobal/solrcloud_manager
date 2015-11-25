@@ -1,7 +1,7 @@
 package com.whitepages.cloudmanager.action
 
 import com.whitepages.cloudmanager.client.{LukeStateResponse, ReplicationHandlerHelpers, SolrRequestHelpers}
-import com.whitepages.cloudmanager.state.ClusterManager
+import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.client.solrj.impl.{HttpSolrClient, HttpSolrServer}
 import org.apache.solr.client.solrj.{SolrClient, SolrServer}
@@ -71,5 +71,6 @@ case class FetchIndex(fromCore: String, toCore: String, fromNode: String, confir
 
   override val postConditions: List[StateCondition] = List()
 
-  override def toString = s"FetchIndex: from: $fromNode, fromCore: $fromCore, toCore: $toCore"
+  override def toString =
+    s"FetchIndex: from: ${SolrReplica.hostName(fromNode)}, fromCore: $fromCore}, toCore: $toCore"
 }

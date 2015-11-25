@@ -1,7 +1,7 @@
 package com.whitepages.cloudmanager.action
 
 import com.whitepages.cloudmanager.client.SolrRequestHelpers
-import com.whitepages.cloudmanager.state.ClusterManager
+import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.params.CollectionParams.CollectionAction
 import org.apache.solr.common.params.ModifiableSolrParams
 
@@ -51,7 +51,7 @@ case class CreateCollection(collection: String,
     s"CreateCollection: name: $collection, slices: $numSlices, config: $configName" +
     s", maxShardsPerNode: ${maxShardsPerNode.getOrElse(1)}" +
     s", replicationFactor: ${replicationFactor.getOrElse(1)}" +
-    s", nodes: " + createNodeSet.map(_.mkString(",")).getOrElse("any") +
+    s", nodes: " + createNodeSet.map(_.map(SolrReplica.hostName).mkString(",")).getOrElse("any") +
     s", async: $async"
   }
 }
