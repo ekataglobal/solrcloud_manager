@@ -5,6 +5,7 @@ import java.nio.file.{Paths, Files, Path}
 import java.util
 
 import com.whitepages.cloudmanager.action._
+import com.whitepages.cloudmanager.operation.plan.{Assignment, Participation}
 import org.apache.solr.client.solrj.impl.CloudSolrServer
 import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
 import org.apache.solr.common.cloud.Replica
@@ -62,55 +63,31 @@ object Operations extends ManagerSupport {
    * @param waitForReplication
    * @return The corresponding Operation
    */
-  def fillCluster(clusterManager: ClusterManager, collection: String, nodesOpt: Option[Seq[String]] = None, waitForReplication: Boolean = true): Operation = {
+  def fillCluster(clusterManager: ClusterManager, collection: String,
+                  nodesOpt: Option[Seq[String]] = None, waitForReplication: Boolean = true,
+                  maxSlicesPerNodeOpt: Option[Int] = None): Operation = {
     val state = clusterManager.currentState
-
-    case class Assignment(node: String, slice: String)
-    case class Participation(assignments: Seq[Assignment]) {
-      lazy val nodeParticipants = assignments.groupBy(_.node).withDefaultValue(Seq())
-      lazy val sliceParticipants = assignments.groupBy(_.slice).withDefaultValue(Seq())
-
-      private def participationCounts(p: Map[String, Seq[Assignment]]) =
-        p.map{ case (node, nodeAssignments) => (node, nodeAssignments.size) }.withDefaultValue(0)
-
-      lazy val slicesPerNode = participationCounts(nodeParticipants)
-      lazy val nodesPerSlice = participationCounts(sliceParticipants)
-      def sliceCount(node: String) = slicesPerNode(node)
-      def nodeCount(slice: String) = nodesPerSlice(slice)
-
-      def +(newAssignment: Assignment) = Participation(assignments :+ newAssignment)
-    }
 
     assert(state.collections.contains(collection), s"Could find collection $collection")
     val currentReplicas = state.replicasFor(collection)
     val participation = Participation(currentReplicas.map((replica) => Assignment(replica.node, replica.sliceName)))
 
-    // use the node with the most slices as a limiter for how many slices to allow per node
-    val maxSlicesPerNode = participation.slicesPerNode.maxBy(_._2)._2
-    val currentSlots = nodesOpt.map(nodeList => currentReplicas.filter(replica => nodeList.contains(replica.node))).getOrElse(currentReplicas).size
-    val availableNodes = nodesOpt.map(nodeList => state.liveNodes & nodeList.toSet).getOrElse(state.liveNodes)
-    val availableSlots = maxSlicesPerNode * availableNodes.size - currentSlots
+    // If not told otherwise, use the node with the most slices as a limiter for how many slices to allow per node
+    val maxSlicesPerNode = maxSlicesPerNodeOpt.getOrElse(participation.slicesPerNode.maxBy(_._2)._2)
+    val currentReplicasOnNodes =
+      nodesOpt.map(nodeList => currentReplicas.filter(replica => nodeList.contains(replica.node)))
+        .getOrElse(currentReplicas)
+    val currentSlots = currentReplicasOnNodes.size
+    val availableNodes =
+      nodesOpt.map(nodeList => state.liveNodes & nodeList.toSet).getOrElse(state.liveNodes)
+    val slotDistribution = availableNodes.map(n => (n, currentReplicasOnNodes.count(_.node == n))).toMap
+    // maxSlicesPerNode could be more or less than the number of replicas on any node under consideration
+    val availableSlots = slotDistribution.values.map(c => Math.max(c, maxSlicesPerNode)).sum - currentSlots
 
-    @tailrec
-    def assignSlot(actions: Seq[AddReplica], participation: Participation, availableSlots: Int): Seq[AddReplica] = {
-      if (availableSlots == 0) {
-        actions
-      }
-      else {
-        // the slice with the fewest replicas
-        val minSlice = participation.nodesPerSlice.minBy(_._2)._1
-        val nodesWithoutSlice = availableNodes -- participation.sliceParticipants(minSlice).map(_.node)
-        // the node with the fewest replicas that doesn't have the slice with the fewest replicas
-        val minNode = nodesWithoutSlice.minBy( participation.sliceCount )
-
-        assignSlot(
-          actions :+ AddReplica(collection, minSlice, minNode, waitForReplication),
-          participation + Assignment(minNode, minSlice),
-          availableSlots - 1)
-      }
-    }
-
-    Operation(assignSlot(Seq(), participation, availableSlots))
+    Operation(
+      participation.assignSlots(availableNodes, availableSlots)
+        .map(a => AddReplica(collection, a.slice, a.node, waitForReplication))
+    )
   }
 
   /**

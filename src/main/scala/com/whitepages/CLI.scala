@@ -153,7 +153,7 @@ object CLI extends App with ManagerSupport {
       opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster containing the collection you're cloning. Default: The same cluster you're cloning into. (-z)"),
       opt[String]("collection") optional() action { (x, c) => { c.copy(collection = x) } } text("The name of the new collection. Default: the name of the cloned collection"),
       opt[String]("config") optional() action { (x, c) => { c.copy(configName = x) } } text("A config name to use for this collection. Default: the config name from the cloned collection"),
-      opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("An number of shards per node. Default: the max shards per node of the cloned collection"),
+      opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max shards per node of the cloned collection"),
       opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("A replacement replication factor. Default: the replication factor of the cloned collection"),
       opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to limit this new collection to. Default: all")
       )
@@ -168,7 +168,8 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "fill") } text("Uses available/unused nodes to add more replicas") children(
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
         opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. Default: all"),
-        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false")
+        opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false"),
+        opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max number of shards on any current node")
       )
     note("\n-----Backup commands-----\n")
     cmd("backupindex") action { (_, c) =>
@@ -276,7 +277,9 @@ object CLI extends App with ManagerSupport {
           }
           case "fill" => {
             val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
-            Operations.fillCluster(clusterManager, config.collection, normalizedNodes, !config.parallelOps)
+            Operations.fillCluster(
+              clusterManager, config.collection, normalizedNodes, !config.parallelOps, config.maxShardsPerNode
+            )
           }
           case "addreplica" => {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))
