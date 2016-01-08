@@ -7,8 +7,8 @@ Provides easy SolrCloud cluster management.
 Command-line syntax, layers two major features on the Solr Collections API:
 
 1. An abundance of caution. Some example Bad Things this helps prevent:
-    * Deleting the last replica for a given slice
-    * Creating a collection that doesn't reference a known config in ZK
+    * Deleting the last replica for a given slice ([SOLR-8257](https://issues.apache.org/jira/browse/SOLR-8257))
+    * Creating a collection that doesn't reference a known config in ZK ([SOLR-5638](https://issues.apache.org/jira/browse/SOLR-5638))
     * Deleting a collection with a current alias
 2. Ease of use:
     * Support for common cluster-manipulation actions, see the "Cluster Commands" section below.
@@ -19,17 +19,18 @@ Prerequisites:
 
 Assumes you're handling ALL collection configuration data in ZooKeeper.
 
-Solr >= 4.8. Specifically, the ADDREPLICA collections API command was added in 4.8. Earlier cluster versions
-may work if you don't need to add replicas, but this is untested.
+Solr >= 4.8, including 5.x. Specifically, the ADDREPLICA collections API command was added in 4.8. 
 
-If your servlet isn't bound to /solr, give it a try anyway, but there may be bugs.
+Earlier cluster versions may work out of the box if you don't need to add replicas, but this is untested. 
+Full support for earlier 4.x versions could probably be achieved by falling back to the core 
+admin API, but this is unwritten.  
 
 Installing:
 ===========
 
 Download the assembly jar from one of the github releases, and run using java, like:
 
-    java -jar solrcloud_manager-assembly-1.2.0.jar --help
+    java -jar solrcloud_manager-assembly-1.4.0.jar --help
     
 
 Basic usage:
@@ -38,63 +39,78 @@ Basic usage:
 Simple commands simply mirror their collections API counterpart, while making sure that the command could (and did) succeed. 
     
     # Show usage: 
-    java -jar solrcloud_manager-assembly-1.2.0.jar --help
+    java -jar solrcloud_manager-assembly-1.4.0.jar --help
 
 Some examples:
 
     # Show cluster state:
-    java -jar solrcloud_manager-assembly-1.2.0.jar -z zk0.example.com:2181/myapp
+    java -jar solrcloud_manager-assembly-1.4.0.jar -z zk0.example.com:2181/myapp
     
     # create a collection
-    java -jar solrcloud_manager-assembly-1.2.0.jar -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf
+    java -jar solrcloud_manager-assembly-1.4.0.jar -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf
 
     # add a replica
-    java -jar solrcloud_manager-assembly-1.2.0.jar addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com
+    java -jar solrcloud_manager-assembly-1.4.0.jar addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com
     
     # Use any unused/underused nodes in the cluster to increase your replication factor
-    java -jar solrcloud_manager-assembly-1.2.0.jar fill -z zk0.example.com:2181/myapp -c collection1
+    java -jar solrcloud_manager-assembly-1.4.0.jar fill -z zk0.example.com:2181/myapp -c collection1
     
     # Remove any replicas not marked "active"
-    java -jar solrcloud_manager-assembly-1.2.0.jar cleancollection -z zk0.example.com:2181/myapp -c collection1
+    java -jar solrcloud_manager-assembly-1.4.0.jar cleancollection -z zk0.example.com:2181/myapp -c collection1
     
     # Move all replicas for all collections from one node to another 
-    java -jar solrcloud_manager-assembly-1.2.0.jar migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com
+    java -jar solrcloud_manager-assembly-1.4.0.jar migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com
 
 
-Terminology:
-============
+Command list
+=============
 
-Terminology here should follow https://wiki.apache.org/solr/SolrTerminology pretty closely, 
-but with one significant exception:
+The --help output is the definitive list, but here's an overview:
 
-There's some confusion between the terms "slice" and "shard" in the Solr code and documentation. This project
-prefers "slice" throughout, but does use "shard" in a few places where Solr exposes that word specifically. 
+Collections API
+---------------
 
-In general, everyone agrees that "slice" should mean the logical partition, and "shard" 
-should mean a specific instance of a slice, but solr's naming convention when creating a  
-collection names slices "shardX", so this confusion probably isn't going away anytime soon. It's
-usually safe to use these words interchangeably to indicate the logical partition.
+Some of the standard collections API commands can be used via this command line. 
 
-Additionally, "node" here refers to a physical host machine running solr. A node specifier takes the format
+* createcollection (CREATE)
+* deletecollection (DELETE)
+* alias (CREATEALIAS)
+* deletealias (DELETEALIAS)
+* addreplica (ADDREPLICA)
+* deletereplica (DELETEREPLICA)
 
-    <IP address>:<port>_solr
+Most of the typical options are supported, and in a few cases the extra checks in this tool can help 
+you avoid bugs in the collections API.
 
-Solr always uses the IP address in a node specification, but this tool will do hostname translation
-if possible, and will select nodes from incomplete specifications if a distinct identifier can be found.
+View commands
+-------------
 
+These don't change cluster state.
 
-Cluster commands:
-=================
+**clusterstatus**
+Prints the current state of the cluster, including:
 
-A lot of the work in large Solrcloud cluster management isn't so much figuring out the right API command, 
-as figuring out the correct **set** of API commands. See the help output for a complete list, but the following 
-common cluster operations are supported:
+* Cluster version
+* Current overseer
+* Current aliases
+* Config sets available, and used
+* All collections and replicas, with the current state of each 
+
+**waitactive**:
+This command returns when all replicas for the given node are active. Useful as a mechanism for delaying 
+other actions. For example, preventing a rolling restart from overstepping your replication factor.
+
+Cluster commands
+-----------------
+
+A lot of the work in Solrcloud cluster management isn't so much figuring out the right Collections API command, 
+it's figuring out the correct **set** of API commands. 
 
 **fill**:
 Adds replicas to nodes not currently/fully participating in a given collection, starting with the slices with the
 lowest replica count.
     
-The number of replicas per node will not exceed the number of replicas per node for the collection
+By default, the number of replicas per node will not exceed the number of replicas per node for the collection
 prior to running this command. May result in uneven replica counts across slices, if extra capacity wasn't 
 evenly divisible.
 
@@ -111,21 +127,6 @@ Removes all replicas from a given node.
 Removes any replicas in a given collection that are not currently marked "active". A node doesn't have to be
 up for its replicas to be removed. 
 WARNING: Replicas in the "recovering" state are not currently considered active.
-    
-**waitactive**:
-This command returns when all replicas for the given node are active. No cluster changes are made. 
-Useful as a mechanism for delaying other actions. For example, preventing a rolling restart from overstepping
-your replication factor.
-
-**backupindex**:
-For a given collection, save a copy of your index data onto the local disk of the nodes. This can protect you
-from user error like accidental deletion, but if you want to protect against hardware failure you'll still need
-a way to ship the backup copy off of the nodes somehow. Giving all your nodes a shared remote 
-filesystem (ie, NFS) and specifying that as the backup directory would work.
-
-**restoreindex**:
-For a given collection, restore a backup created by this tool into that collection. Assumes the backup
-was created by this tool, and that the directory was a shared filesystem.
     
 **copycollection**:
 Provides a method for copying collection index data into another collection, even **across solrcloud clusters**! 
@@ -147,18 +148,22 @@ The cloned collection may be in another solrcloud cluster completely. If the nam
 for the template collection does not also exist in the target cluster, it will be copied over first.
 The resulting collection from this command is a suitable target for a copycollection command.
 
-**populate**: (Experimental)
-Support for a bulk-deployment strategy for a collection. 
+Backup commands
+----------------
 
-Add a new node to your cluster, create your new 
-collection ONLY on that node, and index your data onto it. 
- 
-This gets you an index without impacting current nodes. 
-"populate" at this point will replicate the slices on that single node across the rest of your cluster, and 
-optionally clean up by wiping the shards from the index node so you can cleanly remove it from the cluster again.
+**backupindex**:
+For a given collection, save a copy of your index data onto the local disk of the nodes. This can protect you
+from user error like accidental deletion, but if you want to protect against hardware failure you'll still need
+a way to ship the backup copy off of the nodes somehow. Giving all your nodes a shared remote 
+filesystem (ie, NFS) and specifying that as the backup directory would work.
+
+**restoreindex**:
+For a given collection, restore a backup created by this tool into that collection. Assumes the backup
+was created by this tool, and that the directory was a shared filesystem like an NFS mount.
+    
 
 Config commands
-===============
+---------------
 
 **upconfig** 
 Uploads a given local configset directory to ZK.
@@ -167,24 +172,24 @@ Uploads a given local configset directory to ZK.
 Copies a given configset in ZK to a local directory.
 
 **rmconfig**
-Deletes a given configset from ZK if it not referenced by any collection.
+Deletes a given configset from ZK. (But only if it not referenced by any collection.)
 
     
 TODO:
 =====
 
 * More consistent exception responses and handling (Use ManagerException more, better error messaging)
-* Cross version support (where possible)
 * Better introspection of solr responses
 * Insure paths other than /solr work
+* Lighter weight test suite
 
 SolrCloud Issues:
 =======
 
-As of Solr 4.9, The collections API currently has several issues. 
-This tool can work around some of them, marked (w).
+Here's a list of some of the Solr Collections API issues I'm aware of. 
+This tool can work around or protect against some of them, marked (w).
 
-1. SOLR-6072 - DELETEREPLICA can't delete the files from disk (Fixed in Solr 4.10)
+1. SOLR-6072 - DELETEREPLICA doesn't delete the files from disk (Fixed in Solr 4.10)
 1. (w) SOLR-5638 - If you try to CREATECOLLECTION with a configName that doesn't exist, it creates the cores before noticing that
 the config doesn't exist. This leaves you with cores that can't initialize, which means:
     1. You can't try again because the desired directories for those cores already exist
@@ -195,12 +200,40 @@ the config doesn't exist. This leaves you with cores that can't initialize, whic
 changed after CREATECOLLECTION. As a result, this tool ignores maxShardsPerNode completely, aside from CREATECOLLECTION.
 1. (w) SOLR-5970 - Some collections api requests return status of 0 in the responseHeader, despite a failure. 
 (CREATECOLLECTION in non-async, maybe others)
-1. (w) SOLR-8257 - If you DELETEREPLICA the **last** replica for a given shard, you get an error like 
+1. (w) SOLR-8257 - If you DELETEREPLICA the **last** replica for a given slice, you get an error like 
    "Invalid shard name : shard2 in collection : collection1", but the replica **is** actually removed from the clusterstate,
    leaving you with a broken collection
 1. You can have two replicas of the same slice on the same node (This tool provides some additional protection around the ADDREPLICA 
     command, but not at collection creation time)
-1. Running a Collection API command using the "async" feature hides the actual error message, if there was one
+1. Running a Collection API command using the "async" feature can hide the actual error message, if there was one
+
+Terminology:
+============
+
+Terminology here should follow https://wiki.apache.org/solr/SolrTerminology pretty closely, 
+but with one significant exception:
+
+There's some confusion between the terms "slice" and "shard" in the Solr code and documentation. This project
+prefers "slice" throughout, but does use "shard" in a few places where Solr exposes that word specifically. 
+
+In general, everyone agrees that "slice" should mean the logical partition, and "shard" 
+should mean a specific instance of a slice, but solr's naming convention when creating a  
+collection names slices "shardX", so this confusion probably isn't going away anytime soon. It's
+usually safe to use these words interchangeably to indicate the logical partition.
+
+Additionally, "node" here refers to a physical host machine running solr. A node specifier takes the format
+
+    <IP address>:<port>_<hostcontext>
+    ie:
+    127.0.0.1:8983_solr
+
+By default, Solr uses the IP address in a node specification. This tool will do hostname translation
+on command inputs if possible, and will identify nodes from an incomplete specification if a distinct 
+identifier can be found:
+
+    # works fine, unless you have solr running on multiple ports on that machine
+    host1.example.com
+
 
 Development:
 ============
