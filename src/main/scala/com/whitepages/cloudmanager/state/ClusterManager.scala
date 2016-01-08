@@ -9,7 +9,7 @@ import scala.collection.JavaConverters._
 import org.apache.solr.client.solrj.impl.{HttpSolrClient, CloudSolrClient}
 import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
 
-import scala.util.{Try, Random}
+import scala.util.{Failure, Try, Random}
 
 object ClusterManager extends ManagerSupport {
 
@@ -76,9 +76,11 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
   // Expensive, makes an http request to the cluster.
   // Cache this, although certain things in this response (ie, heap usage) may change later.
   lazy val clusterSystemInfoResp: Try[SystemStateResponse] = {
-    val randomReplica = Random.shuffle(currentState.activeReplicas).head
-    val client = new HttpSolrClient(randomReplica.url)
-    SystemRequestHelpers.getSystemInfo(client)
+    val randomReplica = Random.shuffle(currentState.activeReplicas).headOption
+    randomReplica.map{ replica =>
+      val client = new HttpSolrClient(replica.url)
+      SystemRequestHelpers.getSystemInfo(client)
+    }.getOrElse(Failure(new ManagerException("No active replicas to determine system info with")))
   }
 
   lazy val clusterVersion: SolrCloudVersion = {
@@ -87,7 +89,7 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
     // TODO: Change this to an Option[SolrCloudVersion]?
     // For now, let's assume if we're asking for it, we really do need it.
     if (version == SolrCloudVersion.unknown)
-      throw new ManagerException("Could not determine cluster version")
+      comment.warn(s"Warning: Could not determine solr cluster version, version checks will test against $version")
     version
   }
 
