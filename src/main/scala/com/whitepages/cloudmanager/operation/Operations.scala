@@ -103,7 +103,12 @@ object Operations extends ManagerSupport {
   def cloneReplicas(clusterManager: ClusterManager, from: String, onto: String, waitForReplication: Boolean = true) = {
     val state = clusterManager.currentState
     val replicasToClone = state.allReplicas.filter(_.node == from)
-    Operation(replicasToClone.map(replica => AddReplica(replica.collection, replica.sliceName, onto, waitForReplication)))
+    val existingReplicas = state.allReplicas.filter(_.node == onto)
+    val replicasToCreate = replicasToClone.filterNot(r =>
+      existingReplicas.exists(e => r.sliceName == e.sliceName && r.collection == e.collection)
+    )
+
+    Operation(replicasToCreate.map(replica => AddReplica(replica.collection, replica.sliceName, onto, waitForReplication)))
   }
 
   /**
