@@ -338,7 +338,7 @@ object CLI extends App with ManagerSupport {
               configName = if (config.configName.isEmpty) None else Some(config.configName),
               maxSlicesPerNode = config.maxShardsPerNode,
               replicationFactor = config.replicationFactor,
-              createNodeSet = config.nodeSet
+              createNodeSet = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
             )
             val fromClusterManager =
               if (config.altClusterRef.isEmpty) clusterManager
