@@ -235,7 +235,7 @@ object CLI extends App with ManagerSupport {
             val deletes = for (node <- config.nodeSet.get) yield {
               Operations.wipeNode(
                 clusterManager,
-                startState.canonicalNodeName(node),
+                startState.canonicalNodeName(node, true),
                 if (config.collection.isEmpty) None else Some(config.collection),
                 config.safetyFactor
               )
