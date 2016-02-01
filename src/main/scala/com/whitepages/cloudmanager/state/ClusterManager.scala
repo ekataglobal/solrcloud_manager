@@ -39,7 +39,7 @@ case class ClusterManager(client: CloudSolrClient) extends ManagerSupport {
   val stateReader = client.getZkStateReader
 
   def currentState = {
-    stateReader.updateClusterState(true)
+    stateReader.updateClusterState
     SolrState(stateReader.getClusterState, CollectionInfo(configForCollection), configs)
   }
   def configForCollection(collection: String): String = stateReader.readConfigName(collection)
