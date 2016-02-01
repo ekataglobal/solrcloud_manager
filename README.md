@@ -310,3 +310,10 @@ The test suite is built on top of the JUnit framework provided by Solr itself.
 Unfortunately, this is very spammy output, and the bridge between JUnit and sbt causes some strangeness, 
 including odd test count output.
 
+Other Tools
+===========
+
+It seems like everyone with a significant SolrCloud deployment has written some variant on management tools, but few
+of them have been open sourced. Here's what I'm aware of:
+
+*  [solrcloud-haft](https://github.com/bloomreach/solrcloud-haft) Primarily intended as a java library for use in other programs. Currently tested with Solr 4.6.1.
