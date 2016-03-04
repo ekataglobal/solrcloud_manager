@@ -151,7 +151,7 @@ object CLI extends App with ManagerSupport {
       c.copy(mode = "clonecollection") } text("Creates a new empty collection using another collection (potentially in another cluster) as a template") children(
       opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection to clone"),
       opt[String]("fromCluster") optional() action { (x, c) => { c.copy(altClusterRef = x) } } text("The ZK reference for the cluster containing the collection you're cloning. Default: The same cluster you're cloning into. (-z)"),
-      opt[String]("collection") optional() action { (x, c) => { c.copy(collection = x) } } text("The name of the new collection. Default: the name of the cloned collection"),
+      opt[String]('c', "collection") optional() action { (x, c) => { c.copy(collection = x) } } text("The name of the new collection. Default: the name of the cloned collection"),
       opt[String]("config") optional() action { (x, c) => { c.copy(configName = x) } } text("A config name to use for this collection. Default: the config name from the cloned collection"),
       opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max shards per node of the cloned collection"),
       opt[Int]("replicationFactor") optional() action { (x, c) => { c.copy(replicationFactor = Some(x)) } } text("A replacement replication factor. Default: the replication factor of the cloned collection"),
