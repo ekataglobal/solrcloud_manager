@@ -74,7 +74,6 @@ abstract class ManagerTestBase extends AbstractFullDistribZkTestBase {
     var state = clusterManager.currentState
 
     println("\n\n\n\n\n")
-    state = clusterManager.currentState
     state.printReplicas
     println("\n\n\n\n\n")
     assertTrue(state.inactiveReplicas.isEmpty)

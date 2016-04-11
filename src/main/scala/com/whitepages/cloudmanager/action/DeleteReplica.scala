@@ -26,7 +26,8 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
   )
 
   override def execute(clusterManager: ClusterManager): Boolean = {
-    val replicaName = clusterManager.currentState.replicasFor(collection, slice).find(_.node == node).map(_.replicaName)
+    val replica = clusterManager.currentState.replicasFor(collection, slice).find(_.node == node)
+    val replicaName = replica.map(_.replicaName)
     if (replicaName.isDefined) {
       if (clusterManager.clusterVersion < deleteReplicaCleanupFix)
         comment.warn("WARNING: DeleteReplica does NOT remove the files from disk until 4.10. See SOLR-6072.")
@@ -36,7 +37,12 @@ case class DeleteReplica(collection: String, slice: String, node: String, safety
       params.set("shard", slice)
       params.set("replica", replicaName.get)
 
-      SolrRequestHelpers.submitRequest(clusterManager.client, params)
+      val submitSuccess = SolrRequestHelpers.submitRequest(clusterManager.client, params)
+
+      // If the replica we're deleting is down right now, and the node is too, the request for deletion may
+      // return an error trying to forward the delete to the node hosting that replica.
+      // In that case, we simply have to rely on the postCondition check below to validate the delete actually worked.
+      submitSuccess || !replica.exists(_.active)
     }
     else {
       comment.warn("Couldn't figure out the replica name from the node")
