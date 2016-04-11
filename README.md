@@ -160,6 +160,7 @@ filesystem (ie, NFS) and specifying that as the backup directory would work.
 **restoreindex**:
 For a given collection, restore a backup created by this tool into that collection. Assumes the backup
 was created by this tool, and that the directory was a shared filesystem like an NFS mount.
+WARNING: A given backup may only be restorable ONCE without some other action on your part. See SOLR-8449.
     
 
 Config commands

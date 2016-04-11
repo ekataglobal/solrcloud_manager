@@ -1,17 +1,13 @@
 package com.whitepages.cloudmanager.operation
 
 import java.io.File
-import java.nio.file.{Paths, Files, Path}
-import java.util
+import java.nio.file.{Files, Path, Paths}
 
 import com.whitepages.cloudmanager.action._
+import com.whitepages.cloudmanager.client.SolrCloudVersion
 import com.whitepages.cloudmanager.operation.plan.{Assignment, Participation}
-import org.apache.solr.client.solrj.impl.CloudSolrServer
-import com.whitepages.cloudmanager.state.{SolrReplica, ClusterManager}
-import org.apache.solr.common.cloud.Replica
-import scala.annotation.tailrec
-import com.whitepages.cloudmanager.{OperationsException, ManagerException, ManagerSupport}
-import scala.collection.JavaConverters._
+import com.whitepages.cloudmanager.state.{ClusterManager, SolrReplica}
+import com.whitepages.cloudmanager.{ManagerSupport, OperationsException}
 
 object Operations extends ManagerSupport {
 
@@ -345,7 +341,8 @@ object Operations extends ManagerSupport {
     def backupDir(replica: SolrReplica) = {
       Paths.get(dir, oldCollection.getOrElse(replica.collection), replica.sliceName).toString
     }
-
+    if (clusterManager.clusterVersion < SolrCloudVersion(6,0))
+      comment.warn("WARNING: A given backup may only be restorable ONCE without manual intervention. See SOLR-8449.")
     Operation(collectionReplicas.map(r => RestoreIndex(r.core, backupDir(r))))
   }
 
