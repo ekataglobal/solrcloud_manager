@@ -191,7 +191,7 @@ Here's a list of some of the Solr Collections API issues I'm aware of.
 This tool can work around or protect against some of them, marked (w).
 
 1. SOLR-6072 - DELETEREPLICA doesn't delete the files from disk (Fixed in Solr 4.10)
-1. (w) SOLR-5638 - If you try to CREATECOLLECTION with a configName that doesn't exist, it creates the cores before noticing that
+1. (w) SOLR-5638 (Fixed in at least 5.4) - If you try to CREATECOLLECTION with a configName that doesn't exist, it creates the cores before noticing that
 the config doesn't exist. This leaves you with cores that can't initialize, which means:
     1. You can't try again because the desired directories for those cores already exist
     1. Restarting the node may cause the collection to show up with all shards in "Down" state
