@@ -19,7 +19,7 @@ Prerequisites:
 
 Assumes you're handling ALL collection configuration data in ZooKeeper.
 
-Solr >= 4.8, including 5.x. Specifically, the ADDREPLICA collections API command was added in 4.8. 
+Solr >= 4.8, including 5.x. Specifically, the ADDREPLICA collections API command was added in 4.8. Use with Solr 6.x is currently untested.
 
 Earlier cluster versions may work out of the box if you don't need to add replicas, but this is untested. 
 Full support for earlier 4.x versions could probably be achieved by falling back to the core 
