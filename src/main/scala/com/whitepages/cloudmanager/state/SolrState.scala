@@ -93,21 +93,38 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   def nodesWithCollection(collection: String) = replicasFor(collection).map(_.node).distinct
   def nodesWithoutCollection(collection: String) = liveNodes -- nodesWithCollection(collection)
 
+  def dnsNameMap(nodeList: Set[String] = liveNodes): Map[String,String] = {
+    nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getCanonicalHostName -> node ).toMap
+  }
+
   def canonicalNodeName(hostIndicator: String, allowOfflineReferences: Boolean = false): String = {
+
+    def unambigiousFragment(fragment: String, dnsMap: Map[String,String]): Option[String] = {
+      val matchingMaps = dnsMap.filter{
+        case (dnsName,canonName) => dnsName.contains(fragment) || canonName.contains(fragment)
+      }
+      matchingMaps.toList match {
+        case (dnsName, canonName) :: Nil => Some(canonName)
+        case _ => None
+      }
+    }
+
     val nodeList = if (allowOfflineReferences) allNodes else liveNodes
     if (nodeList.contains(hostIndicator)) {
       hostIndicator
     }
     else {
-      val chunks = hostIndicator.split(':')
-      val host = chunks.head
-      val port = if (chunks.size > 1) ":" + chunks.last else ""
-      val ipAndPort = InetAddress.getByName(host).getHostAddress + port
-      val matches = nodeList.filter( (node) => node.contains(ipAndPort) )
-      matches.size match {
-        case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
-        case 1 => matches.head
-        case _ => throw new ManagerException(s"Ambiguous node name '$hostIndicator', possible matches: $matches")
+      unambigiousFragment(hostIndicator, dnsNameMap(nodeList)).getOrElse {
+        val chunks = hostIndicator.split(':')
+        val host = chunks.head
+        val port = if (chunks.length > 1) ":" + chunks.last else ""
+        val ipAndPort = InetAddress.getByName(host).getHostAddress + port
+        val matches = nodeList.filter((node) => node.contains(ipAndPort))
+        matches.size match {
+          case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
+          case 1 => matches.head
+          case _ => throw new ManagerException(s"Ambiguous node name '$hostIndicator', possible matches: $matches")
+        }
       }
     }
 
