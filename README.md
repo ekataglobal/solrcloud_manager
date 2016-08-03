@@ -96,6 +96,9 @@ Prints the current state of the cluster, including:
 * Config sets available, and used
 * All collections and replicas, with the current state of each 
 
+**clusterhealth**
+Runs a series of checks intended to spot problems in your current cluster state.
+
 **waitactive**:
 This command returns when all replicas for the given node are active. Useful as a mechanism for delaying 
 other actions. For example, preventing a rolling restart from overstepping your replication factor.

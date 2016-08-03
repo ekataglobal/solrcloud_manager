@@ -19,6 +19,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive
   lazy val leader = Option(slice.getLeader).getOrElse("").toString == replica.toString // TODO: Why aren't these the same object in some collections?
   lazy val activeSlice = slice.getState == Slice.State.ACTIVE
   lazy val activeReplica = replica.getState == Replica.State.ACTIVE && alive
+  lazy val stateName = if (slice.getState != Slice.State.ACTIVE) slice.getState.toString else replica.getState.toString
   lazy val active = activeSlice && activeReplica
   lazy val core = replica.getStr(ZkStateReader.CORE_NAME_PROP)
   lazy val sliceName = slice.getName
@@ -26,6 +27,7 @@ case class SolrReplica(collection: String, slice: Slice, replica: Replica, alive
   lazy val url = replica.getStr(ZkStateReader.BASE_URL_PROP)
   lazy val node = replica.getNodeName
   lazy val host = hostName(node)
+  def shortPrintFormat = s"Collection: $collection Slice: $sliceName Replica: $replicaName, Host: $host, Core: $core"
 }
 
 case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, configs: Set[String]) extends ManagerSupport {

@@ -341,8 +341,8 @@ object Operations extends ManagerSupport {
     def backupDir(replica: SolrReplica) = {
       Paths.get(dir, oldCollection.getOrElse(replica.collection), replica.sliceName).toString
     }
-    if (clusterManager.clusterVersion < SolrCloudVersion(6,0))
-      comment.warn("WARNING: A given backup may only be restorable ONCE without manual intervention. See SOLR-8449.")
+    if (clusterManager.clusterVersion < SolrCloudVersion(5,5,1))
+      comment.warn("WARNING: A given backup will only be restorable ONCE without manual intervention. See SOLR-8449.")
     Operation(collectionReplicas.map(r => RestoreIndex(r.core, backupDir(r))))
   }
 

@@ -1,22 +1,20 @@
 package com.whitepages
 
-import java.net.InetAddress
-import java.nio.file.{Paths, Path}
+import java.nio.file.{Path, Paths}
 
 import com.whitepages.cloudmanager.operation.Operations.CloneCollectionOverrides
-import org.apache.solr.client.solrj.impl.CloudSolrServer
-import com.whitepages.cloudmanager.operation.{Operations, Operation}
+import com.whitepages.cloudmanager.operation.{Operation, Operations}
 import com.whitepages.cloudmanager.action._
-import com.whitepages.cloudmanager.{ManagerConsoleLogging, ManagerSupport, ManagerException}
+import com.whitepages.cloudmanager.{ManagerConsoleLogging, ManagerException, ManagerSupport}
 import com.whitepages.cloudmanager.action.UpdateAlias
-import scala.Some
+
 import com.whitepages.cloudmanager.state.ClusterManager
 import com.whitepages.cloudmanager.action.DeleteCollection
 import com.whitepages.cloudmanager.action.DeleteReplica
-import org.apache.solr.common.cloud.ZkStateReader
-import scala.collection.JavaConverters._
-import org.slf4j.LoggerFactory
+import com.whitepages.cloudmanager.clusterhealth._
+
 import org.apache.log4j.Level
+
 import scala.concurrent.duration._
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -69,6 +67,8 @@ object CLI extends App with ManagerSupport {
     note("\n------View commands-----\n")
     cmd("clusterstatus") action { (_, c) =>
       c.copy(mode = "clusterstatus") } text("Print current cluster status. This is the default command.")
+    cmd("clusterhealth") action { (_, c) =>
+      c.copy(mode = "clusterhealth") } text("Run the set of cluster state health checks")
     cmd("waitactive") action { (_, c) =>
       c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster. Useful for preventing other things until a node is ready.") children(
       opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of one or more (comma-delinated) nodes that should be active. Default: localhost."),
@@ -228,6 +228,24 @@ object CLI extends App with ManagerSupport {
             clusterManager.printAliases()
             clusterManager.printConfigs()
             startState.printReplicas()
+            Operation.empty
+          }
+          case "clusterhealth" => {
+            val checks = List(
+              UnusedConfigsets(),
+              UnusedAliases(),
+              InactiveReplicas(),
+              MissingLeaders(),
+              LeaderInitiatedRecovery(),
+              ElectionRigging()
+            )
+            checks.foreach(check => {
+              comment.warn("Checking: " + check.name)
+              for {issues <- check.check(clusterManager)
+                   issue <- issues} {
+                comment.log(issue.level, s"\t${issue.level}: ${issue.message}")
+              }
+            })
             Operation.empty
           }
           case "clean" => {
