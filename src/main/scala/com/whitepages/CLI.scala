@@ -171,6 +171,13 @@ object CLI extends App with ManagerSupport {
         opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false"),
         opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max number of shards on any current node")
       )
+    cmd("retask") action { (_, c) =>
+      c.copy(mode = "retask") } text("Wipes a collection from the given nodes, then expands another collection onto them") children(
+      opt[String]("fromCollection") required() action { (x, c) => { c.copy(fromCollection = x) } } text("The name of the collection being reduced"),
+      opt[String]("toCollection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection being expanded"),
+      opt[String]("nodes") required() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to retask"),
+      opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false")
+      )
     note("\n-----Backup commands-----\n")
     cmd("backupindex") action { (_, c) =>
       c.copy(mode = "backupindex") } text("Triggers a backup request for a given collection") children(
@@ -298,6 +305,10 @@ object CLI extends App with ManagerSupport {
             Operations.fillCluster(
               clusterManager, config.collection, normalizedNodes, !config.parallelOps, config.maxShardsPerNode
             )
+          }
+          case "retask" => {
+            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            Operations.reTaskNodes(clusterManager, config.fromCollection, config.collection, normalizedNodes.get, !config.parallelOps)
           }
           case "addreplica" => {
             Operation(Seq(AddReplica(config.collection, config.slice, startState.canonicalNodeName(config.node))))

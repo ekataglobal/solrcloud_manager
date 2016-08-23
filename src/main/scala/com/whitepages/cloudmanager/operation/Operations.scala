@@ -346,5 +346,23 @@ object Operations extends ManagerSupport {
     Operation(collectionReplicas.map(r => RestoreIndex(r.core, backupDir(r))))
   }
 
+  /**
+    * Wipes fromCollection replicas from the nodes, then offers those nodes for a "fill" operation with another collection
+    * @param clusterManager
+    * @param fromCollection
+    * @param toCollection
+    * @return
+    */
+  def reTaskNodes(clusterManager: ClusterManager,
+                  fromCollection: String,
+                  toCollection: String,
+                  nodes: Seq[String],
+                  waitForReplication: Boolean = true): Operation = {
+    val state = clusterManager.currentState
+    val wipeCommands = nodes.map(node => wipeCollectionFromNode(clusterManager, fromCollection, node)).reduce(_ ++ _)
+    val fillCommand = fillCluster(clusterManager, toCollection, Some(nodes.toSeq), waitForReplication)
+    wipeCommands ++ fillCommand
+  }
+
 
 }
