@@ -239,6 +239,10 @@ identifier can be found:
     host1.example.com
     # This is fine too, if you only have one server with "host1" in the name
     host1
+    # Or you can specify "any node with no replicas of any collection" using the literal string 'empty'
+    empty
+    # Or you can specify a regex
+    regex=host[1-5].*
 
 
 Development:
