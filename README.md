@@ -237,6 +237,8 @@ identifier can be found:
 
     # works fine, unless you have solr running on multiple ports on that machine
     host1.example.com
+    # This is fine too, if you only have one server with "host1" in the name
+    host1
 
 
 Development:
