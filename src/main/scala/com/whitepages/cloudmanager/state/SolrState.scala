@@ -1,11 +1,12 @@
 package com.whitepages.cloudmanager.state
 
-import org.apache.solr.common.cloud.{ZkStateReader, ClusterState, Replica, Slice}
-import scala.util.Try
-import scala.util.matching.Regex
-import scala.collection.JavaConverters._
 import java.net.InetAddress
-import com.whitepages.cloudmanager.{ManagerSupport, ManagerException}
+
+import com.whitepages.cloudmanager.{ManagerException, ManagerSupport}
+import org.apache.solr.common.cloud.{ClusterState, Replica, Slice, ZkStateReader}
+
+import scala.collection.JavaConverters._
+import scala.util.Try
 
 object SolrReplica {
   def hostName(nodeName: String) = {
@@ -80,7 +81,7 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   } yield SolrReplica(collection, slice, node, liveNodes.contains(node.getNodeName))
 
   lazy val liveNodes = state.getLiveNodes.asScala.toSet
-  lazy val downNodes =  allReplicas.map(_.node).filterNot(liveNodes.contains)
+  lazy val downNodes =  allReplicas.map(_.node).filterNot(liveNodes.contains).toSet
   lazy val allNodes = liveNodes ++ downNodes
   lazy val unusedNodes = allNodes.filterNot(allReplicas.map(_.node).contains)
   lazy val activeReplicas = allReplicas.filter(_.active)
@@ -97,6 +98,37 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getCanonicalHostName -> node ).toMap
   }
 
+  def mapToNodes(indicators: Option[Seq[String]], allowOfflineReferences: Boolean = false, ignoreUnrecognized: Boolean = false): Option[Seq[String]] = {
+    indicators.map(mapToNodes(_, allowOfflineReferences, ignoreUnrecognized))
+  }
+  def mapToNodes(indicators: Seq[String], allowOfflineReferences: Boolean, ignoreUnrecognized: Boolean): Seq[String] = {
+    indicators.foldLeft(Seq[String]())( (acc, indicator) => {
+      indicator.toLowerCase match {
+        case "empty" =>
+          val nodeList = if (allowOfflineReferences) unusedNodes else unusedNodes -- downNodes
+          acc ++ nodeList.toSeq
+        case r if r.startsWith("regex=") =>
+          val pattern = r.stripPrefix("regex=").r
+          val nodeList = dnsNameMap(if (allowOfflineReferences) allNodes else liveNodes)
+          nodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+        case i =>
+          val nodeName = Try(Seq(canonicalNodeName(i, allowOfflineReferences))).recover({
+            case e: ManagerException if ignoreUnrecognized =>
+              comment.warn(e.getMessage)
+              Seq[String]()
+          }).get
+          acc ++ nodeName
+      }
+    })  
+  }
+
+  /**
+    * Gets a known host name for a given string
+    * @param hostIndicator
+    * @param allowOfflineReferences
+    * @throw ManagerException if a host could not be safely determined
+    * @return A known canonical host
+    */
   def canonicalNodeName(hostIndicator: String, allowOfflineReferences: Boolean = false): String = {
 
     def unambigiousFragment(fragment: String, dnsMap: Map[String,String]): Option[String] = {

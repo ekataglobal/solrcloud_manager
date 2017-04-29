@@ -70,8 +70,9 @@ object CLI extends App with ManagerSupport {
     cmd("clusterhealth") action { (_, c) =>
       c.copy(mode = "clusterhealth") } text("Run the set of cluster state health checks")
     cmd("waitactive") action { (_, c) =>
-      c.copy(mode = "waitactive") } text("Doesn't return until a given node is fully active and participating in the cluster. Useful for preventing other things until a node is ready.") children(
-      opt[String]('n', "node") optional() action { (x, c) => { c.copy(node = x) } } text("The name of one or more (comma-delinated) nodes that should be active. Default: localhost."),
+      c.copy(mode = "waitactive") } text("Doesn't return until the given nodes are fully active and participating in the cluster. Useful for preventing other things until a node is ready.") children(
+      opt[String]('n', "nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("The name of one or more (comma-delinated) nodes that should be active. Default: localhost."),
+      opt[String]("node") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Deprecated, use '--nodes'"),
       opt[Int]("timeout") optional() action { (x, c) => { c.copy(timeout = x.seconds) } } text("How long (seconds) to wait for the node to be fully active before failing. Default: Infinite."),
       opt[Unit]("strict") optional() action { (_, c) => { c.copy(strict = true) } } text("Whether to fail if any node names couldn't be found. Default false.")
       )
@@ -301,13 +302,13 @@ object CLI extends App with ManagerSupport {
             populationOperation ++ wipeOperation
           }
           case "fill" => {
-            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            val normalizedNodes = startState.mapToNodes(config.nodeSet)
             Operations.fillCluster(
               clusterManager, config.collection, normalizedNodes, !config.parallelOps, config.maxShardsPerNode
             )
           }
           case "retask" => {
-            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            val normalizedNodes = startState.mapToNodes(config.nodeSet)
             Operations.reTaskNodes(clusterManager, config.fromCollection, config.collection, normalizedNodes.get, !config.parallelOps)
           }
           case "addreplica" => {
@@ -334,7 +335,7 @@ object CLI extends App with ManagerSupport {
               exit(1)
             }
 
-            val normalizedNodes = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+            val normalizedNodes = startState.mapToNodes(config.nodeSet)
             Operation(Seq(CreateCollection(
               config.collection,
               config.numSlices,
@@ -367,7 +368,7 @@ object CLI extends App with ManagerSupport {
               configName = if (config.configName.isEmpty) None else Some(config.configName),
               maxSlicesPerNode = config.maxShardsPerNode,
               replicationFactor = config.replicationFactor,
-              createNodeSet = config.nodeSet.map(_.map(name => startState.canonicalNodeName(name)))
+              createNodeSet = startState.mapToNodes(config.nodeSet)
             )
             val fromClusterManager =
               if (config.altClusterRef.isEmpty) clusterManager
@@ -380,19 +381,10 @@ object CLI extends App with ManagerSupport {
             )
           }
           case "waitactive" => {
-            val nodeNames: List[String] =
-              if (config.node.isEmpty) List(java.net.InetAddress.getLocalHost.getHostName)
-              else config.node.split(",").toList
-            val waitNodes = nodeNames.foldLeft(List.empty[String])( (acc, nodeName) => {
-              val canonicalName = Try(startState.canonicalNodeName(nodeName, allowOfflineReferences = true))
-              if (canonicalName.isSuccess)
-                canonicalName.get :: acc
-              else {
-                comment.warn("Could not determine node name from " + nodeName)
-                if (config.strict) exit(1)
-                acc
-              }
-            })
+            val waitNodes = startState.mapToNodes(
+              indicators = Some(config.nodeSet.getOrElse(Seq(java.net.InetAddress.getLocalHost.getHostName))),
+              ignoreUnrecognized = !config.strict
+            ).get
 
             val startTime = System.nanoTime()
             var fullyActive = false
