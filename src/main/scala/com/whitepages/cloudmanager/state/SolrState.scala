@@ -134,9 +134,13 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     */
   def canonicalNodeName(hostIndicator: String, allowOfflineReferences: Boolean = false): String = {
 
-    def unambigiousFragment(fragment: String, dnsMap: Map[String,String]): Option[String] = {
+    def unambiguousFragment(fragment: String, dnsMap: Map[String,String]): Option[String] = {
+      findUnambigousNode(dnsMap, (s: String) => s == fragment)
+        .orElse(findUnambigousNode(dnsMap, (s: String) => s.contains(fragment)))
+    }
+    def findUnambigousNode(dnsMap: Map[String,String], comparison: (String) => Boolean): Option[String] = {
       val matchingMaps = dnsMap.filter{
-        case (dnsName,canonName) => dnsName.contains(fragment) || canonName.contains(fragment)
+        case (dnsName,canonName) => comparison(dnsName) || comparison(canonName)
       }
       matchingMaps.toList match {
         case (dnsName, canonName) :: Nil => Some(canonName)
@@ -149,7 +153,7 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
       hostIndicator
     }
     else {
-      unambigiousFragment(hostIndicator, dnsNameMap(nodeList)).getOrElse {
+      unambiguousFragment(hostIndicator, dnsNameMap(nodeList)).getOrElse {
         val chunks = hostIndicator.split(':')
         val host = chunks.head
         val port = if (chunks.length > 1) ":" + chunks.last else ""
