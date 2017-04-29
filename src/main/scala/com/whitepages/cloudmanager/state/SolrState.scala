@@ -102,7 +102,7 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     indicators.map(mapToNodes(_, allowOfflineReferences, ignoreUnrecognized))
   }
   def mapToNodes(indicators: Seq[String], allowOfflineReferences: Boolean, ignoreUnrecognized: Boolean): Seq[String] = {
-    indicators.foldLeft(Seq[String]())( (acc, indicator) => {
+    val nodeList = indicators.foldLeft(Seq[String]())( (acc, indicator) => {
       indicator.toLowerCase match {
         case "empty" =>
           val nodeList = if (allowOfflineReferences) unusedNodes else unusedNodes -- downNodes
@@ -119,7 +119,10 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
           }).get
           acc ++ nodeName
       }
-    })  
+    })
+    if (nodeList.isEmpty)
+      comment.warn("Couldn't find any nodes matching: " + indicators.mkString(","))
+    nodeList
   }
 
   /**
