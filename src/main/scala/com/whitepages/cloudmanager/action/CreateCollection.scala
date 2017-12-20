@@ -16,7 +16,7 @@ case class CreateCollection(collection: String,
 
 
   override val preConditions: List[StateCondition] = List(
-    StateCondition("collection doesn't already exist", Conditions.collectionExists(collection).andThen(!_))
+    StateCondition(s"collection $collection doesn't already exist", Conditions.collectionExists(collection).andThen(!_))
   )
 
   override def execute(clusterManager: ClusterManager): Boolean = {
