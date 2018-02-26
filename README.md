@@ -241,6 +241,8 @@ identifier can be found:
     host1
     # Or you can specify "any node with no replicas of any collection" using the literal string 'empty'
     empty
+    # Or you can specify "any node" using the literal string 'all'
+    all
     # Or you can specify a regex
     regex=host[1-5].*
 

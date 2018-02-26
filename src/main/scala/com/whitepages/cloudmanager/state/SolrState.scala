@@ -104,6 +104,9 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   def mapToNodes(indicators: Seq[String], allowOfflineReferences: Boolean, ignoreUnrecognized: Boolean): Seq[String] = {
     val nodeList = indicators.foldLeft(Seq[String]())( (acc, indicator) => {
       indicator.toLowerCase match {
+        case "all"  =>
+          val nodeList = if (allowOfflineReferences) allNodes else liveNodes
+          acc ++ nodeList
         case "empty" =>
           val nodeList = if (allowOfflineReferences) unusedNodes else unusedNodes -- downNodes
           acc ++ nodeList.toSeq
