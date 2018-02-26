@@ -57,26 +57,34 @@ object Operations extends ManagerSupport {
    * @param collection
    * @param nodesOpt
    * @param waitForReplication
+   * @param maxSlicesPerNodeOpt
+   * @param constrainToNodes  when determining replica counts, ony count replicas on the nodes under consideration instead of all nodes
    * @return The corresponding Operation
    */
   def fillCluster(clusterManager: ClusterManager, collection: String,
                   nodesOpt: Option[Seq[String]] = None, waitForReplication: Boolean = true,
-                  maxSlicesPerNodeOpt: Option[Int] = None): Operation = {
+                  maxSlicesPerNodeOpt: Option[Int] = None, constrainToNodes: Boolean = false): Operation = {
     val state = clusterManager.currentState
 
     assert(state.collections.contains(collection), s"Could find collection $collection")
-    val currentReplicas = state.replicasFor(collection)
-    val participation = Participation(currentReplicas.map((replica) => Assignment(replica.node, replica.sliceName)))
 
-    // If not told otherwise, use the node with the most slices as a limiter for how many slices to allow per node
-    val maxSlicesPerNode = maxSlicesPerNodeOpt.getOrElse(participation.slicesPerNode.maxBy(_._2)._2)
-    val currentReplicasOnNodes =
-      nodesOpt.map(nodeList => currentReplicas.filter(replica => nodeList.contains(replica.node)))
-        .getOrElse(currentReplicas)
-    val currentSlots = currentReplicasOnNodes.size
-    val availableNodes =
-      nodesOpt.map(nodeList => state.liveNodes & nodeList.toSet).getOrElse(state.liveNodes)
-    val slotDistribution = availableNodes.map(n => (n, currentReplicasOnNodes.count(_.node == n))).toMap
+    val nodes = nodesOpt.getOrElse(state.liveNodes).toSet
+    val allCurrentReplicas = state.replicasFor(collection)
+    val allSlicesForCollection = allCurrentReplicas.map(_.sliceName).toSet
+
+    val consideredReplicas =
+      if (constrainToNodes) allCurrentReplicas.filter(replica => nodes.contains(replica.node))
+      else allCurrentReplicas
+
+    val allParticipation = Participation.fromReplicas(allSlicesForCollection, allCurrentReplicas)
+    val participation = Participation.fromReplicas(allSlicesForCollection, consideredReplicas)
+
+    // If not told otherwise, use the node with the most slices (anywhere) as a limiter for how many slices to allow per node
+    val maxSlicesPerNode = maxSlicesPerNodeOpt.getOrElse(allParticipation.slicesPerNode.maxBy(_._2)._2)
+
+    val currentSlots = consideredReplicas.size
+    val availableNodes = nodes.intersect(state.liveNodes)  // the nodes list could contain nodes that are down
+    val slotDistribution = availableNodes.map(n => (n, allCurrentReplicas.count(_.node == n))).toMap
     // maxSlicesPerNode could be more or less than the number of replicas on any node under consideration
     val availableSlots = slotDistribution.values.map(c => Math.max(c, maxSlicesPerNode)).sum - currentSlots
 

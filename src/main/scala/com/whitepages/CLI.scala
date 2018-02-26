@@ -52,7 +52,8 @@ object CLI extends App with ManagerSupport {
                         fromCollection: String = "",
                         altClusterRef: String = "",
                         confirmOp: Boolean = true,
-                        localPath: Path = Paths.get("")
+                        localPath: Path = Paths.get(""),
+                        constrainToNodes: Boolean = false
   )
   val cliParser = new scopt.OptionParser[CLIConfig]("zk_monitor") {
     note("The following options are available for all commands")
@@ -170,7 +171,9 @@ object CLI extends App with ManagerSupport {
         opt[String]('c', "collection") required() action { (x, c) => { c.copy(collection = x) } } text("The name of the collection to fill out"),
         opt[String]("nodes") optional() action { (x, c) => { c.copy(nodeSet = Some(x.split(","))) } } text("Comma-delineated list of nodes to fill into. Default: all"),
         opt[Unit]("parallel") optional() action { (x, c) => { c.copy(parallelOps = true) } } text("Create all replicas without waiting for each to fully replicate. Default: false"),
-        opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max number of shards on any current node")
+        opt[Int]("maxSlicesPerNode") optional() action { (x, c) => { c.copy(maxShardsPerNode = Some(x)) } } text("The number of shards per node. Default: the max number of shards on any current node"),
+        opt[Unit]("constrainToNodes") optional() action { (_, c) =>
+          c.copy(constrainToNodes = true) } text("When counting existing shards, only count those replicas on the nodes from --nodes. Default false.")
       )
     cmd("retask") action { (_, c) =>
       c.copy(mode = "retask") } text("Wipes a collection from the given nodes, then expands another collection onto them") children(
@@ -304,7 +307,7 @@ object CLI extends App with ManagerSupport {
           case "fill" => {
             val normalizedNodes = startState.mapToNodes(config.nodeSet)
             Operations.fillCluster(
-              clusterManager, config.collection, normalizedNodes, !config.parallelOps, config.maxShardsPerNode
+              clusterManager, config.collection, normalizedNodes, !config.parallelOps, config.maxShardsPerNode, config.constrainToNodes
             )
           }
           case "retask" => {

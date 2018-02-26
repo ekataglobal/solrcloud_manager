@@ -1,26 +1,33 @@
 package com.whitepages.cloudmanager.operation.plan
 
 
+import com.whitepages.cloudmanager.state.SolrReplica
+
 import scala.annotation.tailrec
 
 
 case class Assignment(node: String, slice: String)
-case class Participation(assignments: Seq[Assignment]) {
-  lazy val nodeParticipants = assignments.groupBy(_.node).withDefaultValue(Seq())
-  lazy val sliceParticipants = assignments.groupBy(_.slice).withDefaultValue(Seq())
+case class Participation(slices: Set[String], assignments: Seq[Assignment]) {
+  lazy val nodeParticipants: Map[String, Seq[Assignment]] = assignments.groupBy(_.node).withDefaultValue(Seq())
+  lazy val sliceParticipants: Map[String, Seq[Assignment]] = {
+    val absentSlices: Map[String, Seq[Assignment]] = slices.map( (_, Seq()) ).toMap
+    (absentSlices ++ assignments.groupBy(_.slice)).withDefaultValue(Seq())
+  }
 
-  private def participationCounts(p: Map[String, Seq[Assignment]]) =
-    p.map{ case (node, nodeAssignments) => (node, nodeAssignments.size) }.withDefaultValue(0)
+  private def participationCounts(p: Map[String, Seq[Assignment]]): Map[String, Int] = {
+    p.map { case (node, nodeAssignments) => (node, nodeAssignments.size) }.withDefaultValue(0)
+  }
 
-  lazy val slicesPerNode = participationCounts(nodeParticipants)
-  lazy val nodesPerSlice = participationCounts(sliceParticipants)
+  lazy val slicesPerNode: Map[String, Int] = participationCounts(nodeParticipants)
+  lazy val nodesPerSlice: Map[String, Int] = participationCounts(sliceParticipants)
   def sliceCount(node: String) = slicesPerNode(node)
   def nodeCount(slice: String) = nodesPerSlice(slice)
 
-  def +(newAssignment: Assignment) = Participation(assignments :+ newAssignment)
+  def +(newAssignment: Assignment) = Participation(slices, assignments :+ newAssignment)
 
   def assignSlots(availableNodes: Set[String], availableSlots: Int) =
     Participation.assignSlots(availableNodes, availableSlots, this)
+
 }
 
 object Participation {
@@ -39,13 +46,14 @@ object Participation {
                          availableSlots: Int,
                          participation: Participation,
                          assignments: Seq[Assignment] = Nil): Seq[Assignment] = {
-    if (availableSlots <= 0) {
+    // the slice with the fewest replicas
+    val minSlice = participation.nodesPerSlice.minBy(_._2)._1
+    val nodesWithoutSlice = availableNodes -- participation.sliceParticipants(minSlice).map(_.node)
+
+    if (availableSlots <= 0 || nodesWithoutSlice.isEmpty) {
       assignments
     }
     else {
-      // the slice with the fewest replicas
-      val minSlice = participation.nodesPerSlice.minBy(_._2)._1
-      val nodesWithoutSlice = availableNodes -- participation.sliceParticipants(minSlice).map(_.node)
       // the node with the fewest replicas that doesn't have the slice with the fewest replicas
       val minNode = nodesWithoutSlice.minBy( participation.sliceCount )
       val assignment = Assignment(minNode, minSlice)
@@ -58,5 +66,7 @@ object Participation {
     }
   }
 
+  def fromReplicas(slices: Set[String], replicas: Seq[SolrReplica]): Participation =
+    Participation(slices, replicas.map((replica) => Assignment(replica.node, replica.sliceName)))
 
 }
