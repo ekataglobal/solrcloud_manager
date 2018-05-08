@@ -87,22 +87,54 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   lazy val activeReplicas = allReplicas.filter(_.active)
   lazy val inactiveReplicas = allReplicas.filterNot(activeReplicas.contains)
 
+  /**
+    * Returns all replicas for a given collection
+    * @param collection
+    * @return
+    */
   def replicasFor(collection: String): Seq[SolrReplica] = allReplicas.filter(_.collection == collection)
+
+  /**
+    * Returns all replicas for a given collection, slice combination
+    * @param collection
+    * @param sliceName
+    * @return
+    */
   def replicasFor(collection: String, sliceName: String): Seq[SolrReplica] =
     replicasFor(collection).filter(_.slice.getName == sliceName)
   def liveReplicasFor(collection: String): Seq[SolrReplica] = replicasFor(collection).filter(_.active)
-  def nodesWithCollection(collection: String) = replicasFor(collection).map(_.node).distinct
-  def nodesWithoutCollection(collection: String) = liveNodes -- nodesWithCollection(collection)
+  def nodesWithCollection(collection: String): Seq[String] = replicasFor(collection).map(_.node).distinct
+  def nodesWithoutCollection(collection: String): Set[String] = liveNodes -- nodesWithCollection(collection)
 
+  /**
+    *
+    * @param nodeList
+    * @return Map (canonical host name -> node)
+    */
   def dnsNameMap(nodeList: Set[String] = liveNodes): Map[String,String] = {
     nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getCanonicalHostName -> node ).toMap
   }
 
+  /**
+    *
+    * @param indicators
+    * @param allowOfflineReferences
+    * @param ignoreUnrecognized
+    * @return
+    */
   def mapToNodes(indicators: Option[Seq[String]], allowOfflineReferences: Boolean = false, ignoreUnrecognized: Boolean = false): Option[Seq[String]] = {
     indicators.map(mapToNodes(_, allowOfflineReferences, ignoreUnrecognized))
   }
+
+  /**
+    *
+    * @param indicators
+    * @param allowOfflineReferences
+    * @param ignoreUnrecognized
+    * @return
+    */
   def mapToNodes(indicators: Seq[String], allowOfflineReferences: Boolean, ignoreUnrecognized: Boolean): Seq[String] = {
-    val nodeList = indicators.foldLeft(Seq[String]())( (acc, indicator) => {
+    val nodeList: Seq[String] = indicators.foldLeft(Seq[String]())((acc, indicator) => {
       indicator.toLowerCase match {
         case "all"  =>
           val nodeList = if (allowOfflineReferences) allNodes else liveNodes
@@ -141,6 +173,7 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
       findUnambigousNode(dnsMap, (s: String) => s == fragment)
         .orElse(findUnambigousNode(dnsMap, (s: String) => s.contains(fragment)))
     }
+
     def findUnambigousNode(dnsMap: Map[String,String], comparison: (String) => Boolean): Option[String] = {
       val matchingMaps = dnsMap.filter{
         case (dnsName,canonName) => comparison(dnsName) || comparison(canonName)
