@@ -107,15 +107,18 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   def nodesWithoutCollection(collection: String): Set[String] = liveNodes -- nodesWithCollection(collection)
 
   /**
-    *
+    * Create a map of the fully qualified domain name to the representation of the node in ZK
+    * InetAddress.getByName: Determines the IP address of a host, given the host's name
+    * InetAddress.getCanonicalHostName: Gets the fully qualified domain name for this IP address
     * @param nodeList
-    * @return Map (canonical host name -> node)
+    * @return Map (dns name -> node zk representation)
     */
   def dnsNameMap(nodeList: Set[String] = liveNodes): Map[String,String] = {
     nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getCanonicalHostName -> node ).toMap
   }
 
   /**
+    * Takes the value specified for nodes by the user via the CLI and returns their equivalent representations in Zookeeper
     *
     * @param indicators
     * @param allowOfflineReferences
@@ -128,8 +131,9 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
 
   /**
     *
-    * @param indicators
-    * @param allowOfflineReferences
+    * @param indicators user passed in argument for nodes via the command line e.g. "all","empty", a comma separated
+    *                   list of IPs or a regular expression
+    * @param allowOfflineReferences allow down nodes to be considered
     * @param ignoreUnrecognized
     * @return
     */
@@ -143,10 +147,12 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
           val nodeList = if (allowOfflineReferences) unusedNodes else unusedNodes -- downNodes
           acc ++ nodeList.toSeq
         case r if r.startsWith("regex=") =>
+          //If the user specified a regular expression
           val pattern = r.stripPrefix("regex=").r
-          val nodeList = dnsNameMap(if (allowOfflineReferences) allNodes else liveNodes)
-          nodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+          val nodeList = dnsNameMap(if (allowOfflineReferences) allNodes else liveNodes) //resolve the list of available nodes
+          nodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq //filter these nodes based on the provided pattern
         case i =>
+          //If a comma separated list of nodes is specified, then for each node
           val nodeName = Try(Seq(canonicalNodeName(i, allowOfflineReferences))).recover({
             case e: ManagerException if ignoreUnrecognized =>
               comment.warn(e.getMessage)
@@ -185,15 +191,18 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     }
 
     val nodeList = if (allowOfflineReferences) allNodes else liveNodes
+
+    //If the value specified by the user exactly matches a ZK node representation, return this value as is
     if (nodeList.contains(hostIndicator)) {
       hostIndicator
     }
     else {
+
       unambiguousFragment(hostIndicator, dnsNameMap(nodeList)).getOrElse {
         val chunks = hostIndicator.split(':')
         val host = chunks.head
         val port = if (chunks.length > 1) ":" + chunks.last else ""
-        val ipAndPort = InetAddress.getByName(host).getHostAddress + port
+        val ipAndPort = InetAddress.getByName(host).getHostAddress + port//
         val matches = nodeList.filter((node) => node.contains(ipAndPort))
         matches.size match {
           case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
