@@ -7,6 +7,7 @@ import org.apache.solr.common.cloud.{ClusterState, Replica, Slice, ZkStateReader
 
 import scala.collection.JavaConverters._
 import scala.util.Try
+import scala.util.matching.Regex
 
 object SolrReplica {
   def hostName(nodeName: String) = {
@@ -107,14 +108,26 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   def nodesWithoutCollection(collection: String): Set[String] = liveNodes -- nodesWithCollection(collection)
 
   /**
-    * Create a map of the fully qualified domain name to the representation of the node in ZK
-    * InetAddress.getByName: Determines the IP address of a host, given the host's name
-    * InetAddress.getCanonicalHostName: Gets the fully qualified domain name for this IP address
-    * @param nodeList
+    *
+    * This method take the representation of each node, resolves it and creates a map of
+    *  fully qualified domain name -> node ZK representation
+    *
+    * @param nodeList list of ZK represenation of each node in the cluster
     * @return Map (dns name -> node zk representation)
     */
   def dnsNameMap(nodeList: Set[String] = liveNodes): Map[String,String] = {
     nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getCanonicalHostName -> node ).toMap
+  }
+
+  /**
+    * This method take the representation of each node, resolves it and creates a map of
+    * *  IP address -> node ZK representation
+    *
+    * @param nodeList list of ZK represenation of each node in the cluster
+    * @return Map (ip address -> node zk representation)
+    */
+  def ipNameMap(nodeList: Set[String] = liveNodes): Map[String,String] = {
+    nodeList.map( node => InetAddress.getByName(node.take(node.indexOf(':'))).getHostAddress -> node ).toMap
   }
 
   /**
@@ -141,16 +154,15 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     val nodeList: Seq[String] = indicators.foldLeft(Seq[String]())((acc, indicator) => {
       indicator.toLowerCase match {
         case "all"  =>
-          val nodeList = if (allowOfflineReferences) allNodes else liveNodes
+          val nodeList: Set[String] = if (allowOfflineReferences) allNodes else liveNodes
           acc ++ nodeList
         case "empty" =>
           val nodeList = if (allowOfflineReferences) unusedNodes else unusedNodes -- downNodes
           acc ++ nodeList.toSeq
         case r if r.startsWith("regex=") =>
           //If the user specified a regular expression
-          val pattern = r.stripPrefix("regex=").r
-          val nodeList = dnsNameMap(if (allowOfflineReferences) allNodes else liveNodes) //resolve the list of available nodes
-          nodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq //filter these nodes based on the provided pattern
+          val pattern: Regex = r.stripPrefix("regex=").r
+          getNodeListUsingRegEx(pattern, allowOfflineReferences)
         case i =>
           //If a comma separated list of nodes is specified, then for each node
           val nodeName = Try(Seq(canonicalNodeName(i, allowOfflineReferences))).recover({
@@ -166,52 +178,98 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     nodeList
   }
 
+
   /**
     * Gets a known host name for a given string
-    * @param hostIndicator
+    * @param hostIndicator node indicator passed in by the user, this could be a host name or an IP, or
+    *                      an exact representation of the node in ZK
     * @param allowOfflineReferences
     * @throw ManagerException if a host could not be safely determined
     * @return A known canonical host
     */
   def canonicalNodeName(hostIndicator: String, allowOfflineReferences: Boolean = false): String = {
-
-    def unambiguousFragment(fragment: String, dnsMap: Map[String,String]): Option[String] = {
-      findUnambigousNode(dnsMap, (s: String) => s == fragment)
-        .orElse(findUnambigousNode(dnsMap, (s: String) => s.contains(fragment)))
-    }
-
-    def findUnambigousNode(dnsMap: Map[String,String], comparison: (String) => Boolean): Option[String] = {
-      val matchingMaps = dnsMap.filter{
-        case (dnsName,canonName) => comparison(dnsName) || comparison(canonName)
-      }
-      matchingMaps.toList match {
-        case (dnsName, canonName) :: Nil => Some(canonName)
-        case _ => None
-      }
-    }
-
-    val nodeList = if (allowOfflineReferences) allNodes else liveNodes
+    val rawNodeList = if (allowOfflineReferences) allNodes else liveNodes
 
     //If the value specified by the user exactly matches a ZK node representation, return this value as is
-    if (nodeList.contains(hostIndicator)) {
+    if (rawNodeList.contains(hostIndicator)) {
       hostIndicator
     }
     else {
-
-      unambiguousFragment(hostIndicator, dnsNameMap(nodeList)).getOrElse {
-        val chunks = hostIndicator.split(':')
-        val host = chunks.head
-        val port = if (chunks.length > 1) ":" + chunks.last else ""
-        val ipAndPort = InetAddress.getByName(host).getHostAddress + port//
-        val matches = nodeList.filter((node) => node.contains(ipAndPort))
-        matches.size match {
-          case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
-          case 1 => matches.head
-          case _ => throw new ManagerException(s"Ambiguous node name '$hostIndicator', possible matches: $matches")
-        }
-      }
+      unambiguousFragment(hostIndicator, dnsNameMap(rawNodeList)).getOrElse(
+        unambiguousFragment(hostIndicator, ipNameMap(rawNodeList)).getOrElse(
+        {
+          //Here we attempt to resolve the indicator(user passed in value) instead of the values from ZK
+          val chunks = hostIndicator.split(':')
+          val host = chunks.head
+          val port = if (chunks.length > 1) ":" + chunks.last else ""
+          val ipAndPort = InetAddress.getByName(host).getHostAddress + port
+          val matches = rawNodeList.filter((node) => node.contains(ipAndPort))
+          matches.size match {
+            case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
+            case 1 => matches.head
+            case _ => throw new ManagerException(s"Ambiguous node name '$hostIndicator', possible matches: $matches")
+          }
+        })
+      )
     }
 
   }
+
+
+  /**
+    *
+    * @param fragment
+    * @param resolvedNodeMap
+    * @return
+    */
+  def unambiguousFragment(fragment: String, resolvedNodeMap: Map[String,String]): Option[String] = {
+    findUnambigousNode(resolvedNodeMap, (s: String) => s == fragment)
+      .orElse(findUnambigousNode(resolvedNodeMap, (s: String) => s.contains(fragment)))
+  }
+
+  /**
+    *
+    * @param resolvedNodeMap
+    * @param comparison
+    * @return
+    */
+  def findUnambigousNode(resolvedNodeMap: Map[String,String], comparison: (String) => Boolean): Option[String] = {
+    val matchingMaps = resolvedNodeMap.filter{
+      case (resolvedNodeName, zkNodeName) => comparison(resolvedNodeName) || comparison(zkNodeName)
+    }
+    matchingMaps.toList match {
+      case (resolvedNodeName, zkNodeName) :: Nil => Some(zkNodeName)
+      case _ => None
+    }
+  }
+
+
+  /**
+    * This method takes the passed in regular expression and searches for nodes that match this pattern
+    * In the first pass, the pattern attempts to match against fully qualified domain names
+    * If no nodes matched in the first pass, it then attempts to match against the IP addresses
+    * If no nodes matched in the second pass, it then attempts to match against the raw node representation returned by ZK
+    * Return an empty sequence if none of these work
+    *
+    * @param pattern the pattern to use for matching nodes
+    * @param allowOfflineReferences
+    * @return
+    */
+  def getNodeListUsingRegEx(pattern: Regex, allowOfflineReferences: Boolean): Seq[String] = {
+    val rawNodeList = if (allowOfflineReferences) allNodes else liveNodes
+
+    //First try by matching to the fully qualified domain name
+    val dnsNodeList: Map[String, String] = dnsNameMap(rawNodeList)
+    dnsNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+
+    //If matching via domain name didn't work, try matching to the IP addresses
+    val ipNodeList: Map[String, String] = ipNameMap(rawNodeList)
+    ipNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+
+    //If either of these approaches do not work, trying matching with the unresolved list of nodes i.e. use the
+    //node list from the cluster state without transforming it
+    rawNodeList.filter{pattern.findFirstIn(_).nonEmpty}.toSeq
+  }
+
 
 }
