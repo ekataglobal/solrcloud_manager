@@ -262,21 +262,22 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   def getNodeListUsingRegEx(pattern: Regex, allowOfflineReferences: Boolean): Seq[String] = {
     val clusterStateNodeList = if (allowOfflineReferences) allNodes else liveNodes
 
-    var nodes = Seq()
     //First try by matching to the fully qualified domain name
     val dnsNodeList: Map[String, String] = dnsNameMap(clusterStateNodeList)
-    dnsNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
-    if(dnsNodeList.isEmpty){
+    val dnsMatch = dnsNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+    if(!dnsMatch.isEmpty){ dnsMatch } else{
       //If matching via domain name didn't work, try matching to the IP addresses
       val ipNodeList: Map[String, String] = ipNameMap(clusterStateNodeList)
-      ipNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
-      if(ipNodeList.isEmpty){
+      val ipMatch = ipNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
+      if(!ipMatch.isEmpty){ ipMatch } else {
         //If either of these approaches do not work, trying matching with the unresolved list of nodes i.e. use the
         //node list from the cluster state without transforming it
-        clusterStateNodeList.filter{pattern.findFirstIn(_).nonEmpty}.toSeq
+        val clusterStateMatch = clusterStateNodeList.filter{pattern.findFirstIn(_).nonEmpty}.toSeq
+        if(!clusterStateMatch.isEmpty){ clusterStateMatch } else {
+          //return an empty sequence if nothing matches
+          Seq()
+        }
       }
     }
   }
-
-
 }
