@@ -88,21 +88,12 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
   lazy val activeReplicas = allReplicas.filter(_.active)
   lazy val inactiveReplicas = allReplicas.filterNot(activeReplicas.contains)
 
-  /**
-    * Returns all replicas for a given collection
-    * @param collection
-    * @return
-    */
+
   def replicasFor(collection: String): Seq[SolrReplica] = allReplicas.filter(_.collection == collection)
 
-  /**
-    * Returns all replicas for a given collection, slice combination
-    * @param collection
-    * @param sliceName
-    * @return
-    */
   def replicasFor(collection: String, sliceName: String): Seq[SolrReplica] =
     replicasFor(collection).filter(_.slice.getName == sliceName)
+
   def liveReplicasFor(collection: String): Seq[SolrReplica] = replicasFor(collection).filter(_.active)
   def nodesWithCollection(collection: String): Seq[String] = replicasFor(collection).map(_.node).distinct
   def nodesWithoutCollection(collection: String): Set[String] = liveNodes -- nodesWithCollection(collection)
