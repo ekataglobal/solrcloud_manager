@@ -157,13 +157,12 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
           val pattern: Regex = r.stripPrefix("regex=").r
           getNodeListUsingRegEx(pattern, allowOfflineReferences)
         case i =>
-          //If a comma separated list of nodes is specified, then for each node
-          val nodeName = Try(Seq(canonicalNodeName(i, allowOfflineReferences))).recover({
-            case e: ManagerException if ignoreUnrecognized =>
-              comment.warn(e.getMessage)
-              Seq[String]()
-          }).get
-          acc ++ nodeName
+          val matches: Seq[String] = getNodeListUsingIndicators(i, allowOfflineReferences)
+          matches.size match {
+            case 0 => throw new ManagerException(s"Could not determine a live node from '$indicator'")
+            case 1 => acc ++ matches
+            case _ => throw new ManagerException(s"Ambiguous node name '$indicator', possible matches: $matches")
+          }
       }
     })
     if (nodeList.isEmpty)
@@ -171,104 +170,142 @@ case class SolrState(state: ClusterState, collectionInfo: CollectionInfo, config
     nodeList
   }
 
-
   /**
     * Gets a known host name for a given string
-    * @param hostIndicator node indicator passed in by the user, this could be a host name or an IP, or
+    * @param indicator node indicator passed in by the user, this could be a host name or an IP, or
     *                      an exact representation of the node in ZK
     * @param allowOfflineReferences
     * @throw ManagerException if a host could not be safely determined
     * @return A known canonical host
     */
-  def canonicalNodeName(hostIndicator: String, allowOfflineReferences: Boolean = false): String = {
-    val rawNodeList = if (allowOfflineReferences) allNodes else liveNodes
-
-    //If the value specified by the user exactly matches a node from the cluster state, return this value as is
-    if (rawNodeList.contains(hostIndicator)) {
-      hostIndicator
-    }
-    else {
-      unambiguousFragment(hostIndicator, dnsNameMap(rawNodeList)).getOrElse(
-        unambiguousFragment(hostIndicator, ipNameMap(rawNodeList)).getOrElse(
-          {
-            //Here we attempt to transform the indicator(user passed in value) instead of the values from the cluster state
-            val chunks = hostIndicator.split(':')
-            val host = chunks.head
-            val port = if (chunks.length > 1) ":" + chunks.last else ""
-            val ipAndPort = InetAddress.getByName(host).getHostAddress + port
-            val matches = rawNodeList.filter((node) => node.contains(ipAndPort))
-            matches.size match {
-              case 0 => throw new ManagerException(s"Could not determine a live node from '$hostIndicator'")
-              case 1 => matches.head
-              case _ => throw new ManagerException(s"Ambiguous node name '$hostIndicator', possible matches: $matches")
-            }
-          }
-        )
-      )
+  def canonicalNodeName(indicator: String, allowOfflineReferences: Boolean = false): String = {
+    val matches: Seq[String] = getNodeListUsingIndicators(indicator, allowOfflineReferences)
+    matches.size match {
+      case 0 => throw new ManagerException(s"Could not determine a live node from '$indicator'")
+      case 1 => matches.head
+      case _ => throw new ManagerException(s"Ambiguous node name '$indicator', possible matches: $matches")
     }
   }
 
 
-  /**
-    *
-    * @param fragment          user passed in string for node identification
-    * @param nodeComparisonMap map where key is the resolved name of a node(IP or Host) and value is its
-    *                          string representation in the cluster state
-    * @return
-    */
-  def unambiguousFragment(fragment: String, nodeComparisonMap: Map[String,String]): Option[String] = {
-    findUnambigousNode(nodeComparisonMap, (s: String) => s == fragment)
-      .orElse(findUnambigousNode(nodeComparisonMap, (s: String) => s.contains(fragment)))
-  }
-
-  /**
-    *
-    * @param nodeComparisonMap map where key is the resolved name of a node(IP or Host) and value is its
-    *                          string representation in the cluster state
-    * @param comparison        function to use for comparison
-    * @return
-    */
-  def findUnambigousNode(nodeComparisonMap: Map[String,String], comparison: (String) => Boolean): Option[String] = {
-    val matchingMaps = nodeComparisonMap.filter{
-      case (resolvedNodeString, clusterNodeString) => comparison(resolvedNodeString) || comparison(clusterNodeString)
-    }
-    matchingMaps.toList match {
-      case (resolvedNodeName, clusterNodeString) :: Nil => Some(clusterNodeString)
-      case _ => None
-    }
-  }
-
-
-  /**
-    * This method takes the passed in regular expression and searches for nodes that match this pattern
-    * In the first pass, the pattern attempts to match against fully qualified domain names
-    * If no nodes matched in the first pass, it then attempts to match against the IP addresses
-    * If no nodes matched in the second pass, it then attempts to match against the raw node representation returned by ZK
-    * Return an empty sequence if none of these work
-    *
-    * @param pattern the pattern to use for matching nodes
-    * @param allowOfflineReferences
-    * @return
-    */
   def getNodeListUsingRegEx(pattern: Regex, allowOfflineReferences: Boolean): Seq[String] = {
-    val clusterStateNodeList = if (allowOfflineReferences) allNodes else liveNodes
+    val clusterStateNodeList: Set[String] = if (allowOfflineReferences) allNodes else liveNodes
+    getNodeList(clusterStateNodeList,
+                comparison = (s: String) => pattern.findFirstIn(s).nonEmpty,
+                mapSuccessCriteria = (matches: Map[String,String]) => matches.size>0,
+                setSuccessCriteria = (matches: Seq[String]) => matches.size>0
+    )
+  }
 
+
+  /**
+    *
+    * @param indicator
+    * @param allowOfflineReferences
+    * @return returns Seq[String] instead of String to facilitate error handling
+    */
+  def getNodeListUsingIndicators(indicator:String, allowOfflineReferences: Boolean): Seq[String] = {
+    val clusterStateNodeList: Set[String] = if (allowOfflineReferences) allNodes else liveNodes
+    //If the value specified by the user exactly matches a node from the cluster state, return this value as is
+    if (clusterStateNodeList.contains(indicator)) {
+      Seq(indicator)
+    } else {
+      def exactMatchComparison = (s: String) => s == indicator
+      def subStringMatchComparison = (s: String) => s.contains(indicator)
+      def singleNodeMapSuccessCriteria: Map[String, String] => Boolean = (matches:Map[String,String]) => matches.size == 1
+      def singleNodeSetSuccessCriteria: Seq[String] => Boolean = (matches: Seq[String]) => matches.size == 1
+
+      //Attempt to resolve using exact match
+      val exactMatches = getNodeList(clusterStateNodeList, exactMatchComparison, singleNodeMapSuccessCriteria, singleNodeSetSuccessCriteria)
+      if(!exactMatches.isEmpty) { exactMatches } else {
+        //Attempt to resolve using fuzzy match
+        val subStringMatches = getNodeList(clusterStateNodeList, subStringMatchComparison, singleNodeMapSuccessCriteria, singleNodeSetSuccessCriteria)
+        if(!subStringMatches.isEmpty) { subStringMatches } else {
+          val ipPortMatches =  matchWithIPAndPort(indicator,clusterStateNodeList)
+          if(!ipPortMatches.isEmpty) { ipPortMatches } else {
+            Seq()
+          }
+        }
+      }
+    }
+  }
+
+  /**
+    *  Useful for matching when there are multiple solr instances on the same node registered with
+    *  cluster (registration will be with same node but different port)
+    * @param indicator
+    * @param clusterStateNodeList
+    * @return
+    */
+  def matchWithIPAndPort(indicator: String, clusterStateNodeList: Set[String]): Seq[String] = {
+    val chunks = indicator.split(':')
+    val host = chunks.head
+    val port = if (chunks.length > 1) ":" + chunks.last else ""
+    val ipAndPort = InetAddress.getByName(host).getHostAddress + port
+    val matches: Set[String] = clusterStateNodeList.filter((node) => node.contains(ipAndPort))
+    matches.toSeq
+  }
+
+  /**
+    *
+    * @param clusterStateNodeList list of nodes from the cluster state
+    * @param comparison
+    * @param mapSuccessCriteria function to determine matching success when comparing against resolved node representations (IP or host)
+    * @param setSuccessCriteria function to determine matching success when comparing against node representations from cluster state
+    * @return
+    */
+  def getNodeList(clusterStateNodeList: Set[String], comparison: (String) => Boolean,
+                  mapSuccessCriteria: Map[String,String] => Boolean,
+                  setSuccessCriteria: Seq[String] => Boolean ): Seq[String] = {
     //First try by matching to the fully qualified domain name
-    val dnsNodeList: Map[String, String] = dnsNameMap(clusterStateNodeList)
-    val dnsMatch = dnsNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
-    if(!dnsMatch.isEmpty){ dnsMatch } else{
-      //If matching via domain name didn't work, try matching to the IP addresses
-      val ipNodeList: Map[String, String] = ipNameMap(clusterStateNodeList)
-      val ipMatch = ipNodeList.filter{ case (k, v) => pattern.findFirstIn(k).nonEmpty}.values.toSeq
-      if(!ipMatch.isEmpty){ ipMatch } else {
-        //If either of these approaches do not work, trying matching with the unresolved list of nodes i.e. use the
-        //node list from the cluster state without transforming it
-        val clusterStateMatch = clusterStateNodeList.filter{pattern.findFirstIn(_).nonEmpty}.toSeq
-        if(!clusterStateMatch.isEmpty){ clusterStateMatch } else {
-          //return an empty sequence if nothing matches
+    val dnsNodeMap: Map[String, String] = dnsNameMap(clusterStateNodeList)
+    val dnsMatches = findNodes(dnsNodeMap, comparison, mapSuccessCriteria)
+    if(!dnsMatches.isEmpty){ dnsMatches } else {
+      //If matching via domain name didn't work, try matching to the IP address
+      val ipNodeMap: Map[String, String] = ipNameMap(clusterStateNodeList)
+      val ipMatches = findNodes(ipNodeMap, comparison, mapSuccessCriteria)
+      if(!ipMatches.isEmpty){ ipMatches } else {
+        //If either of these approaches do not work, trying matching with the list of node strings from the cluster state
+        val clusterStateMatches = findNodes(clusterStateNodeList, comparison, setSuccessCriteria)
+        if(!clusterStateMatches.isEmpty){ ipMatches } else {
           Seq()
         }
       }
     }
   }
+
+  /**
+    * Performs a comparison against a map which contains a resolved version of a node in the cluster (IP or host) as the key
+    * and the string representation of this node in the cluster state
+    * @param nodeComparisonMap map where key is the resolved name of a node(IP or Host) and value is its
+    *                          string representation in the cluster state
+    * @param comparison        function to use for comparison
+    * @param successCriteria   function that takes the "matched" elements and determines success or failure e.g. match only 1, match atleast 1
+    * @return
+    */
+  def findNodes(nodeComparisonMap: Map[String,String], comparison: (String) => Boolean, successCriteria: Map[String,String] => Boolean):Seq[String] = {
+    val matchingMaps: Map[String, String] = nodeComparisonMap.filter{
+      case (resolvedNodeString, clusterNodeString) => comparison(resolvedNodeString) || comparison(clusterNodeString)
+    }
+    if(successCriteria(matchingMaps)){
+      matchingMaps.map({case (k,v) => v}).toSeq
+    } else{
+      Seq()
+    }
+  }
+
+  /**
+    * Performs the comparison directly against list of nodes from the cluster state
+    * @param clusterStateNodeList
+    * @param comparison
+    * @param successCriteria
+    * @return
+    */
+  def findNodes(clusterStateNodeList: Set[String], comparison: (String) => Boolean, successCriteria: Seq[String] => Boolean ): Seq[String] = {
+    val clusterStateMatch: Seq[String] = clusterStateNodeList.filter{comparison(_)}.toSeq
+    if(successCriteria(clusterStateMatch)){ clusterStateMatch } else {
+      Seq()
+    }
+  }
+
 }
