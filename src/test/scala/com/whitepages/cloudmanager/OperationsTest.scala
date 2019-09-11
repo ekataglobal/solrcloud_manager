@@ -32,7 +32,7 @@ import scala.collection.JavaConverters._
 @ThreadLeakScope(Scope.NONE)  // disable the usual lucene test case leak checking
 class OperationsTest extends ManagerTestBase {
   override def managerTest() = {
-    val clusterManager = new ClusterManager(cloudClient)
+ val clusterManager = new ClusterManager(cloudClient)
 
     // get a clean slate - cluster with no collections
     assertTrue(Operation(Seq(DeleteCollection(oldCollectionName))).execute(cloudClient))
@@ -41,6 +41,7 @@ class OperationsTest extends ManagerTestBase {
     testWipeNode(clusterManager)
     testPopulateCluster(clusterManager)
     testFillCluster(clusterManager)
+    testFillCluster2(clusterManager)
     testCleanCluster(clusterManager)
     testBackupRestore(clusterManager)
   }
@@ -120,6 +121,23 @@ class OperationsTest extends ManagerTestBase {
     assertTrue(Operation(Seq(DeleteCollection("testfill"))).execute(cloudClient))
   }
 
+
+  def testFillCluster2(clusterManager: ClusterManager): Unit = {
+    val liveNodes = clusterManager.currentState.liveNodes.size
+
+     addCollection(clusterManager, "testfill", 10, 4, 2)
+
+    var countBySlice = clusterManager.currentState.replicasFor("testfill").groupBy(_.node).map{ case (slice, replicas) => (slice, replicas.size)}
+    val opp = Operations.fillCluster(clusterManager, "testfill", None, true, Some(6))
+
+    val result = opp.execute(cloudClient);
+
+    //countBySlice = clusterManager.currentState.replicasFor("testfill").groupBy(_.sliceName).map{ case (slice, replicas) => (slice, replicas.size)}
+
+    // cleanup
+    assertTrue(Operation(Seq(DeleteCollection("testfill"))).execute(cloudClient))
+  }
+
   def testCleanCluster(clusterManager: ClusterManager): Unit = {
     val controlPort = controlJetty.getBaseUrl.getPort.toString  // the "control" jetty has a convienent handle, so we'll use that
     val controlNode = clusterManager.currentState.liveNodes.filter(_.contains(controlPort)).head
@@ -194,7 +212,7 @@ class OperationsTest extends ManagerTestBase {
 
 
   private def addCollection(clusterManager: ClusterManager, collection: String, numSlices: Int, maxSlicesPerNode: Int, replicationFactor: Int) {
-    assertEquals(0, numSlices % maxSlicesPerNode)
+  //  assertEquals(0, numSlices % maxSlicesPerNode)
     val neededNodes = (numSlices / maxSlicesPerNode) * replicationFactor
     val targetNodes = clusterManager.currentState.liveNodes.take(neededNodes).toSeq
     val createCollection = Operation(Seq(CreateCollection(collection, numSlices, "conf1", Some(numSlices), Some(replicationFactor), Some(targetNodes))))

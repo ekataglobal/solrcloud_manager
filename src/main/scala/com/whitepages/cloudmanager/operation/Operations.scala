@@ -69,9 +69,9 @@ object Operations extends ManagerSupport {
     assert(state.collections.contains(collection), s"Could find collection $collection")
 
     val nodes = nodesOpt.getOrElse(state.liveNodes).toSet
-    val allCurrentReplicas = state.replicasFor(collection)
-    val allSlicesForCollection = allCurrentReplicas.map(_.sliceName).toSet
+    val allCurrentReplicas: Seq[SolrReplica] = state.replicasFor(collection)
 
+    val allSlicesForCollection = allCurrentReplicas.map(_.sliceName).toSet
     val consideredReplicas =
       if (constrainToNodes) allCurrentReplicas.filter(replica => nodes.contains(replica.node))
       else allCurrentReplicas
@@ -84,12 +84,12 @@ object Operations extends ManagerSupport {
 
     val currentSlots = consideredReplicas.size
     val availableNodes = nodes.intersect(state.liveNodes)  // the nodes list could contain nodes that are down
-    val slotDistribution = availableNodes.map(n => (n, allCurrentReplicas.count(_.node == n))).toMap
+    val slotDistribution = availableNodes.map(n => (n, maxSlicesPerNode - allCurrentReplicas.count(_.node == n))).toMap
+
     // maxSlicesPerNode could be more or less than the number of replicas on any node under consideration
     val availableSlots = slotDistribution.values.map(c => Math.max(c, maxSlicesPerNode)).sum - currentSlots
-
     Operation(
-      participation.assignSlots(availableNodes, availableSlots)
+      participation.assignSlots(availableNodes, availableSlots, slotDistribution)
         .map(a => AddReplica(collection, a.slice, a.node, waitForReplication))
     )
   }
