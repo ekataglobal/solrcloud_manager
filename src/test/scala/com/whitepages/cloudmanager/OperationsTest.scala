@@ -125,14 +125,16 @@ class OperationsTest extends ManagerTestBase {
   def testFillCluster2(clusterManager: ClusterManager): Unit = {
     val liveNodes = clusterManager.currentState.liveNodes.size
 
-     addCollection(clusterManager, "testfill", 10, 4, 2)
+    addCollection(clusterManager, "testfill", 10, 4, 2)
+    val countBySlice = clusterManager.currentState.replicasFor("testfill").groupBy(_.node).map{ case (slice, replicas) => (slice, replicas.size)}
+    assertTrue("We should be using 5 nodes", countBySlice.forall{ case (slice, count) => count == 5})
 
-    var countBySlice = clusterManager.currentState.replicasFor("testfill").groupBy(_.node).map{ case (slice, replicas) => (slice, replicas.size)}
     val opp = Operations.fillCluster(clusterManager, "testfill", None, true, Some(6))
 
     val result = opp.execute(cloudClient);
 
-    //countBySlice = clusterManager.currentState.replicasFor("testfill").groupBy(_.sliceName).map{ case (slice, replicas) => (slice, replicas.size)}
+    val sliceCounts = clusterManager.currentState.replicasFor("testfill").groupBy(_.sliceName).map{ case (slice, replicas) => replicas.size }
+    assertEquals("everything should be on three nodes", 10, sliceCounts.count(_ == 3))
 
     // cleanup
     assertTrue(Operation(Seq(DeleteCollection("testfill"))).execute(cloudClient))
