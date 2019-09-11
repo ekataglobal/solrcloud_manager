@@ -32,7 +32,7 @@ import scala.collection.JavaConverters._
 @ThreadLeakScope(Scope.NONE)  // disable the usual lucene test case leak checking
 class OperationsTest extends ManagerTestBase {
   override def managerTest() = {
- val clusterManager = new ClusterManager(cloudClient)
+    val clusterManager = new ClusterManager(cloudClient)
 
     // get a clean slate - cluster with no collections
     assertTrue(Operation(Seq(DeleteCollection(oldCollectionName))).execute(cloudClient))
