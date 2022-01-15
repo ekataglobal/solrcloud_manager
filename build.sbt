@@ -26,8 +26,16 @@ libraryDependencies ++= Seq(
   "org.apache.solr"      %  "solr-test-framework" % "5.5.0" % "test",     // must precede solrj in the classpath
   "org.scalatest"        %% "scalatest"           % "2.2.4" % "test",
   "com.novocode"         %  "junit-interface"     % "0.11"  % "test",
-  "org.slf4j"            % "slf4j-log4j12"        % "1.7.7",
-  "log4j"                % "log4j"                % "1.2.17",
+  "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.17.1",
+  "org.apache.logging.log4j" % "log4j-api"        % "2.17.1",
+  "org.apache.logging.log4j" % "log4j-1.2-api"    % "2.17.1",
   "org.apache.solr"      %  "solr-solrj"          % "5.5.0",
   "com.github.scopt"     %% "scopt"               % "3.3.0"
 )
+
+mergeStrategy in assembly := {
+  case PathList(ps @ _*) if ps.last endsWith "Log4j2Plugins.dat" => MergeStrategy.discard
+  case x =>
+    val oldStrategy = (mergeStrategy in assembly).value
+    oldStrategy(x)
+}
