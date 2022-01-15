@@ -30,7 +30,7 @@ Installing:
 
 Download the assembly jar from one of the github releases, and run using java, like:
 
-    java -jar solrcloud_manager-assembly-1.7.0.jar --help
+    java -jar solrcloud_manager-assembly-1.7.1.jar --help
     
 
 Basic usage:
@@ -39,27 +39,27 @@ Basic usage:
 Simple commands simply mirror their collections API counterpart, while making sure that the command could (and did) succeed. 
     
     # Show usage: 
-    java -jar solrcloud_manager-assembly-1.7.0.jar --help
+    java -jar solrcloud_manager-assembly-1.7.1.jar --help
 
 Some examples:
 
     # Show cluster state:
-    java -jar solrcloud_manager-assembly-1.7.0.jar -z zk0.example.com:2181/myapp
+    java -jar solrcloud_manager-assembly-1.7.1.jar -z zk0.example.com:2181/myapp
     
     # create a collection
-    java -jar solrcloud_manager-assembly-1.7.0.jar -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf
+    java -jar solrcloud_manager-assembly-1.7.1.jar -z zk0.example.com:2181/myapp -c collection1 --slices 2 --config myconf
 
     # add a replica
-    java -jar solrcloud_manager-assembly-1.7.0.jar addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com
+    java -jar solrcloud_manager-assembly-1.7.1.jar addreplica -z zk0.example.com:2181/myapp -c collection1 --slice shard1 --node server2.example.com
     
     # Use any unused/underused nodes in the cluster to increase your replication factor
-    java -jar solrcloud_manager-assembly-1.7.0.jar fill -z zk0.example.com:2181/myapp -c collection1
+    java -jar solrcloud_manager-assembly-1.7.1.jar fill -z zk0.example.com:2181/myapp -c collection1
     
     # Remove any replicas not marked "active"
-    java -jar solrcloud_manager-assembly-1.7.0.jar cleancollection -z zk0.example.com:2181/myapp -c collection1
+    java -jar solrcloud_manager-assembly-1.7.1.jar cleancollection -z zk0.example.com:2181/myapp -c collection1
     
     # Move all replicas for all collections from one node to another 
-    java -jar solrcloud_manager-assembly-1.7.0.jar migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com
+    java -jar solrcloud_manager-assembly-1.7.1.jar migrate -z zk0.example.com:2181/myapp --from node1.example.com --onto node2.example.com
 
 
 Command list
